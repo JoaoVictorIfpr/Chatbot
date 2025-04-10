@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chatbot com Gemini</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Chatbot com Gemini</h1>
+    </header>
+    
+    <div class="chat-container">
+      <div id="messages"></div>
+      
+      <div class="input-area">
+        <input type="text" id="userInput" placeholder="Digite uma mensagem..." autocomplete="off"/>
+        <button onclick="sendMessage()">Enviar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Melhorando o script para adicionar efeitos e classes de mensagem
+    document.addEventListener('DOMContentLoaded', function() {
+      const input = document.getElementById('userInput');
+      input.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          sendMessage();
+        }
+      });
+      
+      // Mensagem de boas-vindas
+      setTimeout(() => {
+        addBotMessage("Olá! Eu sou o assistente Gemini. Como posso ajudar você hoje?");
+      }, 500);
+    });
+    
+    async function sendMessage() {
+      const input = document.getElementById('userInput');
+      const messages = document.getElementById('messages');
+      const userMessage = input.value.trim();
+
+      if (!userMessage) return;
+
+      // Adiciona mensagem do usuário
+      addUserMessage(userMessage);
+      input.value = '';
+
+      // Mostra indicador de digitação
+      const typingIndicator = document.createElement('div');
+      typingIndicator.className = 'message bot-message';
+      typingIndicator.id = 'typing-indicator';
+      typingIndicator.innerHTML = '<div class="message-sender">Gemini</div>Digitando<div class="typing-indicator"><span></span><span></span><span></span></div>';
+      messages.appendChild(typingIndicator);
+      messages.scrollTop = messages.scrollHeight;
+
+      try {
+        const response = await fetch('http://localhost:3000/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: userMessage })
+        });
+
+        // Remove indicador de digitação
+        const indicator = document.getElementById('typing-indicator');
+        if (indicator) messages.removeChild(indicator);
+
+        const data = await response.json();
+        addBotMessage(data.response);
+      } catch (error) {
+        // Remove indicador de digitação
+        const indicator = document.getElementById('typing-indicator');
+        if (indicator) messages.removeChild(indicator);
+        
+        // Adiciona mensagem de erro
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'error';
+        errorDiv.textContent = 'Erro na conexão com o servidor.';
+        messages.appendChild(errorDiv);
+        messages.scrollTop = messages.scrollHeight;
+      }
+    }
+
+    function addUserMessage(text) {
+      const messages = document.getElementById('messages');
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'message user-message';
+      messageDiv.innerHTML = `<div class="message-sender">Você</div>${text}`;
+      messages.appendChild(messageDiv);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    function addBotMessage(text) {
+      const messages = document.getElementById('messages');
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'message bot-message';
+      messageDiv.innerHTML = `<div class="message-sender">Gemini</div>${text}`;
+      messages.appendChild(messageDiv);
+      messages.scrollTop = messages.scrollHeight;
+    }
+  </script>
+</body>
+</html>
