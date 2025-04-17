@@ -2,15 +2,19 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src * 'self' data: 'unsafe-inline' 'unsafe-eval'; font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com;">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Chatbot com Gemini</title>
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <title>Gustavo, o cara das farm</title>
+  <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div class="container">
-    <header>
-      <h1>Chatbot com Gemini</h1>
+    <header class="minecraft-header">
+      <div class="header-content">
+        <img src="img/gustavocraft.png" alt="Avatar de Gustavo, especialista em Minecraft" class="avatar">
+        <h1>Gustavo, o cara das farm</h1>
+      </div>
     </header>
     
     <div class="chat-container">
@@ -18,7 +22,7 @@
       
       <div class="input-area">
         <input type="text" id="userInput" placeholder="Digite uma mensagem..." autocomplete="off"/>
-        <button onclick="sendMessage()">Enviar</button>
+        <button onclick="sendMessage()" class="minecraft-button">Enviar</button>
       </div>
     </div>
   </div>
@@ -35,7 +39,7 @@
       
       // Mensagem de boas-vindas
       setTimeout(() => {
-        addBotMessage("Olá! Eu sou o assistente Gemini. Como posso ajudar você hoje?");
+        addBotMessage("Qual Farm iremos fazer hoje?");
       }, 500);
     });
     
@@ -78,7 +82,7 @@
         
         // Adiciona mensagem de erro
         const errorDiv = document.createElement('div');
-        errorDiv.className = 'error';
+        errorDiv.className = 'error minecraft-error';
         errorDiv.textContent = 'Erro na conexão com o servidor.';
         messages.appendChild(errorDiv);
         messages.scrollTop = messages.scrollHeight;
