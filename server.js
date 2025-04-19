@@ -2,6 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import dotenv from "@dotenvx/dotenvx";
+
+dotenv.config();
 
 const app = express();
 const port = 3000;
@@ -9,7 +12,6 @@ const port = 3000;
 app.use(cors());
 app.use(bodyParser.json());
 
-console.log (process.env)
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_APIKEY);
 
 app.post("/chat", async (req, res) => {
