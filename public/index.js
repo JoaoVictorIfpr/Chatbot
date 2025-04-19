@@ -5,7 +5,7 @@ async function sendMessage() {
   addMessage(userInput, 'user-message');
 
   try {
-    const response = await fetch('http://localhost:3000/chat', {
+    const response = await fetch(`${process.env.BACKENDURL}chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

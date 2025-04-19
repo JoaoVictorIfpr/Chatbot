@@ -9,7 +9,6 @@ const port = 3000;
 app.use(cors());
 app.use(bodyParser.json());
 
-// Substitua pela sua chave de API do Gemini
 const genAI = new GoogleGenerativeAI("AIzaSyCqKvadw_3NKaivkuEQH401BK3OZRDEl0M");
 
 app.post("/chat", async (req, res) => {
