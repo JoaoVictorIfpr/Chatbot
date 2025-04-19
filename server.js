@@ -9,7 +9,8 @@ const port = 3000;
 app.use(cors());
 app.use(bodyParser.json());
 
-const genAI = new GoogleGenerativeAI("AIzaSyCqKvadw_3NKaivkuEQH401BK3OZRDEl0M");
+console.log (process.env)
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_APIKEY);
 
 app.post("/chat", async (req, res) => {
   try {
