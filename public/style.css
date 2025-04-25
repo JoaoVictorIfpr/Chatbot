@@ -420,3 +420,122 @@ h1 {
     text-align: center;
   }
 }
+/* Adicione esses estilos ao seu arquivo style.css */
+
+/* Estilos para o conteúdo do markdown */
+.message-content {
+  line-height: 1.4;
+}
+
+/* Estilos para listas do markdown */
+.message-content ul, .message-content ol {
+  padding-left: 20px;
+  margin: 10px 0;
+}
+
+/* Estilos para blocos de código */
+.message-content pre {
+  background-color: rgba(0, 0, 0, 0.3);
+  padding: 10px;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 10px 0;
+}
+
+.message-content code {
+  font-family: monospace;
+  padding: 2px 4px;
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+/* Estilos para títulos */
+.message-content h1, .message-content h2, .message-content h3, 
+.message-content h4, .message-content h5, .message-content h6 {
+  margin-top: 15px;
+  margin-bottom: 10px;
+  font-weight: bold;
+}
+
+.message-content h1 {
+  font-size: 1.5em;
+}
+
+.message-content h2 {
+  font-size: 1.3em;
+}
+
+.message-content h3 {
+  font-size: 1.2em;
+}
+
+/* Estilos para tabelas */
+.message-content table {
+  border-collapse: collapse;
+  margin: 15px 0;
+  width: 100%;
+}
+
+.message-content th, .message-content td {
+  border: 1px solid #444;
+  padding: 8px;
+  text-align: left;
+}
+
+.message-content th {
+  background-color: rgba(0, 0, 0, 0.3);
+}
+
+/* Estilos para citações */
+.message-content blockquote {
+  border-left: 3px solid #6a6a6a;
+  padding-left: 10px;
+  margin: 10px 0;
+  color: #cccccc;
+}
+
+/* Ajuste de margens para parágrafos */
+.message-content p {
+  margin: 8px 0;
+}
+/* Adicione esses estilos ao seu arquivo style.css */
+
+/* Botão de exclusão na lista de conversas */
+.delete-conversation {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  background-color: #8B3030;
+  border: 2px solid #5E1F1F;
+  color: white;
+  width: 22px;
+  height: 22px;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  cursor: pointer;
+  z-index: 10;
+}
+
+.conversation-item {
+  position: relative;
+  /* Seus estilos existentes aqui */
+}
+
+.conversation-item:hover .delete-conversation {
+  opacity: 1;
+}
+
+.delete-conversation:hover {
+  background-color: #A03A3A;
+}
+
+/* Conversa ativa */
+.conversation-item.active {
+  background-color: var(--minecraft-sidebar-active);
+  border-color: #275418;
+}
