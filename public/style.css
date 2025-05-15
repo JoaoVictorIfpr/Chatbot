@@ -539,3 +539,42 @@ h1 {
   background-color: var(--minecraft-sidebar-active);
   border-color: #275418;
 }
+
+
+/* Estilos para o estado vazio do chat */
+/* Adicione estes estilos ao final do seu arquivo style.css */
+
+.empty-chat-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  height: 100%;
+  padding: 20px;
+  color: rgba(255, 255, 255, 0.7);
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+.empty-chat-icon {
+  font-size: 48px;
+  margin-bottom: 15px;
+  animation: bounce 2s infinite;
+}
+
+.empty-chat-state h3 {
+  font-size: 24px;
+  margin-bottom: 10px;
+  text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.empty-chat-state p {
+  font-size: 18px;
+  max-width: 300px;
+  line-height: 1.4;
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}

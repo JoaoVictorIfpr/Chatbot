@@ -6,6 +6,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const clearChatBtn = document.getElementById("clearChatBtn");
   const newChatBtn = document.getElementById("newChatBtn");
   const conversationsList = document.getElementById("conversationsList");
+  const toggleSidebarBtn = document.getElementById("toggleSidebarBtn");
+  const sidebar = document.querySelector(".sidebar");
+  
   let conversationsHistory = [];
   let currentChatHistory = [];
   let currentConversationIndex = -1;
@@ -57,6 +60,9 @@ document.addEventListener("DOMContentLoaded", () => {
       }],
       timestamp: Date.now()
     });
+    
+    // Salvar o histórico após cada mensagem
+    saveConversation();
   }
 
   function addBotMessage(message) {
@@ -69,6 +75,43 @@ document.addEventListener("DOMContentLoaded", () => {
       }],
       timestamp: Date.now()
     });
+    
+    // Salvar o histórico após cada mensagem
+    saveConversation();
+  }
+
+  // Função para adicionar chamada de função ao histórico (não visível para o usuário)
+  function addFunctionCall(name, args) {
+    currentChatHistory.push({
+      role: "model",
+      parts: [{
+        functionCall: {
+          name: name,
+          args: args
+        }
+      }],
+      timestamp: Date.now()
+    });
+    
+    // Salvar após adicionar a chamada de função
+    saveConversation();
+  }
+
+  // Função para adicionar resposta de função ao histórico (não visível para o usuário)
+  function addFunctionResponse(name, response) {
+    currentChatHistory.push({
+      role: "function",
+      parts: [{
+        functionResponse: {
+          name: name,
+          response: response
+        }
+      }],
+      timestamp: Date.now()
+    });
+    
+    // Salvar após adicionar a resposta da função
+    saveConversation();
   }
 
   async function sendMessage() {
@@ -79,22 +122,30 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     
+    // Remover o estado vazio se existir
+    const emptyState = messagesContainer.querySelector(".empty-chat-state");
+    if (emptyState) {
+      messagesContainer.removeChild(emptyState);
+    }
+    
     addUserMessage(input);
     inputField.value = "";
     
-    // Modificado: Enviando apenas a última mensagem e o contexto da conversa
-    const lastUserMessage = input;
-    const chatContext = currentChatHistory.slice(0, -1); // Histórico anterior
+    // Desabilitar botão de envio e mostrar indicador de loading
+    sendButton.disabled = true;
+    sendButton.textContent = "Enviando...";
     
+    // Enviando o histórico completo para manter o contexto incluindo function calls
     const payload = {
-      message: lastUserMessage,
-      history: chatContext
+      message: input,
+      history: currentChatHistory.slice(0, -1) // Exclui a mensagem atual do usuário que acabamos de adicionar
     };
     
     console.log("Dados enviados para a API:", JSON.stringify(payload));
     
     try {
-      const response = await fetch(`https://chatbot-gbxu.onrender.com/chat`, {
+      // Altere a URL para apontar para seu servidor local
+      const response = await fetch(`https://chatbot-gbxu.onrender.com/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -108,18 +159,26 @@ document.addEventListener("DOMContentLoaded", () => {
       
       const resposta = data.response || "Desculpe, não entendi sua pergunta. Tente novamente!";
       console.log("Resposta a ser exibida:", resposta);
+      
+      // Adicionar quaisquer chamadas de função e respostas ao histórico
+      if (data.functionCalls && data.functionCalls.length > 0) {
+        for (const call of data.functionCalls) {
+          addFunctionCall(call.name, call.args);
+          if (call.response) {
+            addFunctionResponse(call.name, call.response);
+          }
+        }
+      }
+      
       addBotMessage(resposta);
       
-      // Salvar a conversa após cada troca de mensagens
-      if (currentConversationIndex >= 0) {
-        // Atualizar conversa existente
-        conversationsHistory[currentConversationIndex] = [...currentChatHistory];
-      }
-      localStorage.setItem("conversationsHistory", JSON.stringify(conversationsHistory));
-      displaySavedConversations();
     } catch (error) {
       console.error("Erro ao enviar mensagem:", error);
       addBotMessage("Erro ao se comunicar com o servidor. Tente novamente mais tarde.");
+    } finally {
+      // Reabilitar botão de envio
+      sendButton.disabled = false;
+      sendButton.textContent = "Enviar";
     }
   }
 
@@ -131,6 +190,7 @@ document.addEventListener("DOMContentLoaded", () => {
       } else {
         // Nova conversa
         conversationsHistory.push([...currentChatHistory]);
+        currentConversationIndex = conversationsHistory.length - 1;
       }
       localStorage.setItem("conversationsHistory", JSON.stringify(conversationsHistory));
       displaySavedConversations();
@@ -142,10 +202,34 @@ document.addEventListener("DOMContentLoaded", () => {
     currentChatHistory = [...conversationsHistory[conversationIndex]];
     currentConversationIndex = conversationIndex; // Definir o índice da conversa atual
     
-    currentChatHistory.forEach((msg) => {
-      const text = msg.parts[0].text;
-      addMessage(msg.role === "user" ? "você" : "gemini", text);
-    });
+    if (currentChatHistory.length === 0) {
+      // Se a conversa estiver vazia, mostrar o estado vazio
+      const emptyStateDiv = document.createElement("div");
+      emptyStateDiv.classList.add("empty-chat-state");
+      emptyStateDiv.innerHTML = `
+        <div class="empty-chat-icon">💬</div>
+        <h3>Gustavo, o cara das farm</h3>
+        <p>Pergunte sobre farms no Minecraft, mecânicas de redstone, e dicas para otimizar seu mundo!</p>
+      `;
+      messagesContainer.appendChild(emptyStateDiv);
+    } else {
+      // Se tiver mensagens, exibi-las
+      currentChatHistory.forEach((msg) => {
+        if (msg.role === "user" || msg.role === "model") {
+          // Se é uma mensagem de texto normal (não uma chamada de função)
+          if (msg.parts[0].text !== undefined) {
+            const text = msg.parts[0].text;
+            addMessage(msg.role === "user" ? "você" : "Gustavo", text);
+          }
+          // Ignoramos as functionCalls e functionResponses pois não precisam ser mostradas na UI
+        }
+      });
+    }
+    
+    // Fechar sidebar em dispositivos móveis após selecionar conversa
+    if (window.innerWidth <= 900) {
+      sidebar.classList.remove("active");
+    }
   }
 
   function deleteConversation(index, event) {
@@ -181,7 +265,9 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       
       // Encontrar a primeira mensagem do usuário (não do bot)
-      let userMessageIndex = conversation.findIndex(msg => msg.role === "user");
+      let userMessageIndex = conversation.findIndex(msg => 
+        msg.role === "user" && msg.parts[0].text !== undefined
+      );
       let displayText = "Nova Conversa";
       
       if (userMessageIndex !== -1) {
@@ -214,38 +300,94 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function newChat() {
-    saveConversation();
+    // Salvar a conversa atual antes de criar uma nova
+    if (currentChatHistory.length > 0) {
+      saveConversation();
+    }
+    
     clearChat();
     currentConversationIndex = -1; // Indicar que estamos em uma nova conversa
-    setTimeout(() => addBotMessage("Qual Farm iremos fazer hoje?"), 500);
+    
+    // Criar uma nova conversa vazia sem mensagem de boas-vindas
+    conversationsHistory.push([]);
+    currentConversationIndex = conversationsHistory.length - 1;
+    localStorage.setItem("conversationsHistory", JSON.stringify(conversationsHistory));
+    displaySavedConversations();
+    
+    // Definir o foco no campo de entrada para o usuário começar a digitar
+    inputField.focus();
   }
 
   function loadConversationsHistoryFromStorage() {
     const savedConversations = localStorage.getItem("conversationsHistory");
     if (savedConversations) {
-      conversationsHistory = JSON.parse(savedConversations);
-      displaySavedConversations();
-      if (conversationsHistory.length > 0) {
-        loadConversation(conversationsHistory.length - 1);
-      } else {
-        setTimeout(() => addBotMessage("Qual Farm iremos fazer hoje?"), 500);
+      try {
+        conversationsHistory = JSON.parse(savedConversations);
+        displaySavedConversations();
+        if (conversationsHistory.length > 0) {
+          // Carregar a última conversa salva
+          loadConversation(conversationsHistory.length - 1);
+        } else {
+          // Criar uma nova conversa vazia se não houver conversas salvas
+          conversationsHistory.push([]);
+          currentConversationIndex = 0;
+          localStorage.setItem("conversationsHistory", JSON.stringify(conversationsHistory));
+          displaySavedConversations();
+        }
+      } catch (error) {
+        console.error("Erro ao carregar histórico de conversas:", error);
+        localStorage.removeItem("conversationsHistory"); // Limpar o histórico corrompido
+        conversationsHistory = [];
+        
+        // Criar uma nova conversa vazia após erro
+        conversationsHistory.push([]);
+        currentConversationIndex = 0;
+        localStorage.setItem("conversationsHistory", JSON.stringify(conversationsHistory));
+        displaySavedConversations();
       }
     } else {
-      setTimeout(() => addBotMessage("Qual Farm iremos fazer hoje?"), 500);
+      // Iniciar com uma nova conversa vazia
+      conversationsHistory.push([]);
+      currentConversationIndex = 0;
+      localStorage.setItem("conversationsHistory", JSON.stringify(conversationsHistory));
+      displaySavedConversations();
     }
+    
+    // Definir o foco no campo de entrada para o usuário começar a digitar
+    inputField.focus();
   }
 
   function clearChat() {
     messagesContainer.innerHTML = "";
     currentChatHistory = [];
     messagesContainer.scrollTop = 0;
+    
+    // Adicionar uma dica visual quando o chat estiver vazio
+    const emptyStateDiv = document.createElement("div");
+    emptyStateDiv.classList.add("empty-chat-state");
+    emptyStateDiv.innerHTML = `
+      <div class="empty-chat-icon">💬</div>
+      <h3>Gustavo, o cara das farm</h3>
+      <p>Pergunte sobre farms no Minecraft, mecânicas de redstone, e dicas para otimizar seu mundo!</p>
+    `;
+    messagesContainer.appendChild(emptyStateDiv);
+  }
+
+  // Toggle sidebar em dispositivos móveis
+  if (toggleSidebarBtn) {
+    toggleSidebarBtn.addEventListener("click", () => {
+      sidebar.classList.toggle("active");
+    });
   }
 
   sendButton.addEventListener("click", sendMessage);
   inputField.addEventListener("keypress", (e) => {
     if (e.key === "Enter") sendMessage();
   });
-  clearChatBtn.addEventListener("click", clearChat);
+  clearChatBtn.addEventListener("click", () => {
+    clearChat();
+    newChat(); // Iniciar nova conversa após limpar o chat
+  });
   newChatBtn.addEventListener("click", newChat);
 
   loadConversationsHistoryFromStorage();
