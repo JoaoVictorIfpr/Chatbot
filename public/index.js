@@ -144,8 +144,8 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("Dados enviados para a API:", JSON.stringify(payload));
     
     try {
-      // Altere a URL para apontar para seu servidor local
-      const response = await fetch(`https://chatbot-gbxu.onrender.com/`, {
+      // URL do backend no Render
+      const response = await fetch(`https://chatbot-gbxu.onrender.com/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
