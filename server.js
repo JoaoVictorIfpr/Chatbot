@@ -46,6 +46,7 @@ async function getWeather(args) {
   const apiKey = process.env.OPENWEATHER_API_KEY;
   
   if (!apiKey) {
+    console.error("Chave da API OpenWeatherMap não configurada no .env");
     return { error: "Chave da API OpenWeatherMap não configurada." };
   }
   
@@ -53,6 +54,7 @@ async function getWeather(args) {
   
   try {
     const response = await axios.get(url);
+    console.log("Resposta da API OpenWeatherMap:", response.data);
     return {
       location: response.data.name,
       temperature: response.data.main.temp,
@@ -80,6 +82,7 @@ app.post("/chat", async (req, res) => {
     
     // Verificar se há uma mensagem válida
     if (!message) {
+      console.error("Requisição recebida sem mensagem.");
       return res.status(400).json({ error: "Mensagem ausente na requisição" });
     }
     
@@ -91,7 +94,7 @@ app.post("/chat", async (req, res) => {
       functionDeclarations: [
         {
           name: "getCurrentTime",
-          description: "Obtém a data e hora atuais no Brasil.",
+          description: "Obtém a data e hora atuais no Brasil (fuso horário de São Paulo).",
           parameters: { 
             type: "object", 
             properties: {} // Sem parâmetros necessários
@@ -105,7 +108,7 @@ app.post("/chat", async (req, res) => {
             properties: {
               location: {
                 type: "string",
-                description: "A cidade para a qual obter a previsão do tempo (ex: 'Curitiba, BR')."
+                description: "A cidade e, opcionalmente, o país para a qual obter a previsão do tempo (ex: 'Curitiba, BR', 'London, UK')."
               }
             },
             required: ["location"]
@@ -120,50 +123,53 @@ app.post("/chat", async (req, res) => {
       tools: tools
     });
     
-    // Lidar com o histórico de conversas - CORREÇÃO AQUI
+    // Lidar com o histórico de conversas
     let processedHistory = [];
     if (history && history.length > 0) {
-      // Convertemos o histórico para o formato que o Gemini espera
       for (const msg of history) {
-        // Pular mensagens sem role ou parts
         if (!msg.role || !msg.parts) continue;
         
         const role = msg.role === "user" ? "user" : 
                      msg.role === "model" ? "model" : 
                      msg.role === "function" ? "function" : null;
         
-        if (!role) continue; // Pular se não for um papel reconhecido
+        if (!role) continue;
         
-        // Criar uma nova entrada processada
-        const processedMsg = { role };
+        const processedMsg = { role, parts: [] };
         
-        // Lidar com diferentes tipos de parts
-        if (msg.parts[0].text) {
-          processedMsg.parts = [{ text: msg.parts[0].text }];
-          processedHistory.push(processedMsg);
+        // Garantir que parts seja um array e processar cada parte
+        const partsArray = Array.isArray(msg.parts) ? msg.parts : [msg.parts];
+        
+        for (const part of partsArray) {
+          if (part.text) {
+            processedMsg.parts.push({ text: part.text });
+          }
+          else if (part.functionCall) {
+            processedMsg.parts.push({
+              functionCall: {
+                name: part.functionCall.name,
+                args: part.functionCall.args
+              }
+            });
+          }
+          else if (part.functionResponse) {
+            processedMsg.parts.push({
+              functionResponse: {
+                name: part.functionResponse.name,
+                response: part.functionResponse.response
+              }
+            });
+          }
         }
-        else if (msg.parts[0].functionCall) {
-          processedMsg.parts = [{
-            functionCall: {
-              name: msg.parts[0].functionCall.name,
-              args: msg.parts[0].functionCall.args
-            }
-          }];
-          processedHistory.push(processedMsg);
-        }
-        else if (msg.parts[0].functionResponse) {
-          processedMsg.parts = [{
-            functionResponse: {
-              name: msg.parts[0].functionResponse.name,
-              response: msg.parts[0].functionResponse.response
-            }
-          }];
-          processedHistory.push(processedMsg);
+        
+        // Adicionar ao histórico processado apenas se tiver partes válidas
+        if (processedMsg.parts.length > 0) {
+            processedHistory.push(processedMsg);
         }
       }
     }
     
-    console.log("Histórico processado:", JSON.stringify(processedHistory));
+    console.log("Histórico processado para a API:", JSON.stringify(processedHistory));
     
     const fullPrompt = `
 Você é Gustavo, um especialista altamente qualificado em Minecraft, com foco em farms automáticas, mecânicas avançadas do jogo, otimização de recursos e estratégias para sobrevivência, criativo e até servidores multiplayer.
@@ -180,14 +186,15 @@ Características do seu estilo:
 - Se o usuário fizer uma pergunta fora do escopo do Minecraft, responda educadamente que seu foco é exclusivamente Minecraft, e especialmente farms.
 
 Se o usuário perguntar sobre data, hora ou clima, você pode usar as ferramentas disponíveis para buscar essas informações.
-quando te perguntarem o clima, pergunte de qual cidade a pessoa quer.
+Quando te perguntarem o clima, pergunte de qual cidade a pessoa quer.
 Agora, receba a dúvida do jogador:
 "${message}"
     `;
 
-    // Decidir se usamos chat baseado em histórico ou geração simples
     let resposta = "";
+    let finalResponsePayload = {};
     
+    // Usar o modo chat se houver histórico
     if (processedHistory.length > 0) {
       console.log("Iniciando chat com histórico processado");
       
@@ -199,90 +206,130 @@ Agora, receba a dúvida do jogador:
           }
         });
       
+        console.log("Enviando mensagem para o chat:", message);
         const result = await chat.sendMessage(message);
+        console.log("Resultado inicial da IA:", JSON.stringify(result));
         
-        // Verificar chamadas de função
-        let functionCalls = [];
-        if (result.response.functionCalls && result.response.functionCalls().length > 0) {
-          const functionCall = result.response.functionCalls()[0];
-          const functionName = functionCall.name;
-          const functionArgs = functionCall.args;
-          
-          console.log(`Chamada de função detectada: ${functionName}`, functionArgs);
-          
-          // Executar a função
-          const functionToCall = availableFunctions[functionName];
-          let functionResult;
-          
-          if (functionName === 'getWeather') {
-            functionResult = await functionToCall(functionArgs);
-          } else {
-            functionResult = functionToCall(functionArgs);
-          }
-          
-          functionCalls.push({
-            name: functionName,
-            args: functionArgs,
-            response: functionResult
-          });
-          
-          // Enviar o resultado de volta
-          const resultFromFunctionCall = await chat.sendMessage([
-            {
-              functionResponse: {
-                name: functionName,
-                response: functionResult
-              }
+        let functionCallsDetected = [];
+        const responseCandidates = result.response.candidates;
+        
+        // Verificar se há chamadas de função na resposta
+        if (responseCandidates && responseCandidates[0].content && responseCandidates[0].content.parts) {
+            const functionCallPart = responseCandidates[0].content.parts.find(part => part.functionCall);
+            
+            if (functionCallPart) {
+                const functionCall = functionCallPart.functionCall;
+                const functionName = functionCall.name;
+                const functionArgs = functionCall.args;
+                
+                console.log(`Chamada de função detectada: ${functionName}`, functionArgs);
+                
+                // Executar a função correspondente
+                const functionToCall = availableFunctions[functionName];
+                let functionResult;
+                
+                if (functionToCall) {
+                    if (functionName === 'getWeather') {
+                        functionResult = await functionToCall(functionArgs);
+                    } else {
+                        functionResult = functionToCall(functionArgs);
+                    }
+                    console.log(`Resultado da função ${functionName}:`, functionResult);
+                    
+                    functionCallsDetected.push({
+                        name: functionName,
+                        args: functionArgs,
+                        response: functionResult
+                    });
+                    
+                    // Enviar o resultado da função de volta para a IA
+                    console.log("Enviando resultado da função para a IA...");
+                    const resultFromFunctionCall = await chat.sendMessage([
+                        {
+                            functionResponse: {
+                                name: functionName,
+                                response: functionResult
+                            }
+                        }
+                    ]);
+                    console.log("Resultado da IA após execução da função:", JSON.stringify(resultFromFunctionCall));
+                    
+                    // *** CORREÇÃO APLICADA AQUI ***
+                    // Verificar se a IA forneceu uma resposta textual após a função
+                    if (resultFromFunctionCall.response && resultFromFunctionCall.response.text) {
+                        resposta = resultFromFunctionCall.response.text();
+                        console.log("Resposta textual da IA após função:", resposta);
+                    } else {
+                        // Se não houver texto, usar uma mensagem padrão ou o resultado da função
+                        resposta = `Executei a função ${functionName}. Resultado: ${JSON.stringify(functionResult)}`; 
+                        console.log(`IA não forneceu texto após ${functionName}. Usando resposta padrão/resultado.`);
+                    }
+                } else {
+                    console.error(`Função ${functionName} não encontrada!`);
+                    resposta = `Desculpe, não encontrei a função ${functionName} para executar.`;
+                }
+            } else {
+                // Se não houve chamada de função, pegar a resposta de texto normal
+                resposta = result.response.text ? result.response.text() : "Não recebi uma resposta textual.";
+                console.log("Nenhuma chamada de função detectada. Resposta textual:", resposta);
             }
-          ]);
-          
-          resposta = resultFromFunctionCall.response.text();
         } else {
-          resposta = result.response.text();
+             // Caso não haja candidates ou parts válidos
+             resposta = result.response.text ? result.response.text() : "Não consegui processar a resposta da IA.";
+             console.log("Estrutura de resposta inesperada. Resposta textual:", resposta);
         }
         
-        // Incluir chamadas de função na resposta, se houver
-        if (functionCalls.length > 0) {
-          res.json({ 
-            response: resposta,
-            functionCalls: functionCalls
-          });
-        } else {
-          res.json({ response: resposta });
+        // Preparar o payload final da resposta
+        finalResponsePayload = { response: resposta };
+        if (functionCallsDetected.length > 0) {
+            finalResponsePayload.functionCalls = functionCallsDetected;
         }
+        
       } catch (error) {
-        console.error("Erro no modo chat:", error);
-        // Log detalhado do erro para depuração
+        console.error("Erro durante o modo chat:", error);
         if (error.response) {
-          console.error("Erro da API:", error.response.data);
+          console.error("Detalhes do erro da API:", error.response.data);
         }
         
-        // Fallback para geração de conteúdo simples
-        console.log("Tentando fallback para geração simples sem histórico");
+        // Fallback para geração simples em caso de erro no chat
+        console.log("Tentando fallback para geração simples sem histórico...");
         try {
           const result = await model.generateContent(fullPrompt);
-          resposta = result.response.text();
-          res.json({ response: resposta });
+          resposta = result.response.text ? result.response.text() : "Ocorreu um erro e não consegui gerar uma resposta no fallback.";
+          finalResponsePayload = { response: resposta };
         } catch (fallbackError) {
           console.error("Erro no fallback:", fallbackError);
-          res.status(500).json({ 
-            error: "Erro ao gerar resposta: " + error.message,
+          return res.status(500).json({ 
+            error: "Erro ao gerar resposta (fallback): " + fallbackError.message,
             tip: "Verificar logs do servidor para mais detalhes"
           });
         }
       }
     } else {
+      // Usar geração simples se não houver histórico
       console.log("Usando geração simples sem histórico");
-      const result = await model.generateContent(fullPrompt);
-      resposta = result.response.text();
-      res.json({ response: resposta });
+      try {
+          const result = await model.generateContent(fullPrompt);
+          resposta = result.response.text ? result.response.text() : "Não recebi uma resposta textual inicial.";
+          finalResponsePayload = { response: resposta };
+      } catch (genError) {
+          console.error("Erro na geração simples:", genError);
+          return res.status(500).json({ 
+            error: "Erro ao gerar resposta (simples): " + genError.message,
+            tip: "Verificar logs do servidor para mais detalhes"
+          });
+      }
     }
     
+    // Enviar a resposta final para o cliente
+    console.log("Enviando payload final para o cliente:", JSON.stringify(finalResponsePayload));
+    res.json(finalResponsePayload);
+    
   } catch (error) {
-    console.error("Erro detalhado:", error);
+    console.error("Erro geral no endpoint /chat:", error);
     res.status(500).json({ 
-      error: "Erro ao gerar resposta: " + error.message,
-      tip: "Verifique se a chave API do Gemini está correta no arquivo .env"
+      error: "Erro interno do servidor: " + error.message,
+      tip: "Verifique os logs do servidor e a chave API do Gemini no arquivo .env"
     });
   }
 });
@@ -290,4 +337,7 @@ Agora, receba a dúvida do jogador:
 app.listen(port, () => {
   console.log(`Servidor rodando em http://localhost:${port}`);
   console.log(`Chave API do Gemini: ${GEMINI_API_KEY ? "✓ Configurada" : "✗ Não configurada"}`);
+  // Verificar se a chave OpenWeatherMap está configurada
+  const OPENWEATHER_API_KEY = process.env.OPENWEATHER_API_KEY;
+  console.log(`Chave API OpenWeatherMap: ${OPENWEATHER_API_KEY ? "✓ Configurada" : "✗ Não configurada (necessária para função de clima)"}`);
 });
