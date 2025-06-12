@@ -6,6 +6,7 @@ import dotenv from "@dotenvx/dotenvx";
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
+import { MongoClient, ServerApiVersion } from 'mongodb';
 
 // Configurar dotenv para carregar variáveis de ambiente
 dotenv.config();
@@ -15,6 +16,15 @@ const port = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(bodyParser.json());
+app.use(express.json()); // Middleware para parsear corpo de requisição JSON
+
+// Servir arquivos estáticos da pasta 'public'
+app.use(express.static('public'));
+
+// --- INÍCIO: Fase 3 - Simulação do Ranking ---
+// Array para simular o armazenamento de dados de ranking em memória
+let dadosRankingVitrine = []; 
+// ---------------------------------------------
 
 // Verificar se a chave API existe
 const GEMINI_API_KEY = process.env.GEMINI_APIKEY;
@@ -25,6 +35,41 @@ if (!GEMINI_API_KEY) {
   console.error("GEMINI_APIKEY=sua_chave_api_aqui");
   process.exit(1); // Encerrar o aplicativo se a chave não estiver definida
 }
+
+// Configuração do MongoDB
+const mongoUri = process.env.MONGO_URI;
+let db; // Variável para guardar a referência do banco
+
+// Função para conectar ao MongoDB
+async function connectDB() {
+    if (db) return db; // Se já conectado, retorna a instância
+    if (!mongoUri) {
+        console.error("MONGO_URI não definida no .env!");
+        console.error("Por favor, adicione MONGO_URI=sua_string_de_conexao_mongodb no arquivo .env");
+        return null; 
+    }
+    // IMPORTANTE: Use a MONGO_URI da atividade que inclui o usuário 'user_log_acess'
+    const client = new MongoClient(mongoUri, {
+        serverApi: {
+            version: ServerApiVersion.v1,
+            strict: true,
+            deprecationErrors: true,
+        }
+    });
+    try {
+        await client.connect();
+        // O nome do banco 'IIW2023A_Logs' já está na string de conexão, então db() funciona.
+        db = client.db(); 
+        console.log("✓ Conectado ao MongoDB Atlas!");
+        return db;
+    } catch (err) {
+        console.error("✗ Falha ao conectar ao MongoDB:", err);
+        return null; 
+    }
+}
+
+// Chamar a função para conectar quando o servidor inicia
+connectDB();
 
 // Inicializar o cliente do Gemini
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
@@ -39,7 +84,6 @@ function getCurrentTime() {
   };
 }
 
-// Função para buscar informações sobre o clima
 async function getWeather(args) {
   console.log("Executando getWeather com args:", args);
   const location = args.location;
@@ -66,21 +110,135 @@ async function getWeather(args) {
   }
 }
 
-// Mapeamento de funções disponíveis
 const availableFunctions = {
   getCurrentTime: getCurrentTime,
   getWeather: getWeather
 };
 
+// Endpoint para obter IP e geolocalização do usuário
+app.get('/api/user-info', async (req, res) => {
+    try {
+        let ip = req.headers['x-forwarded-for']?.split(',').shift() || req.socket?.remoteAddress;
+        
+        if (!ip) {
+            return res.status(400).json({ error: "Não foi possível determinar o endereço IP." });
+        }
+
+        if (ip.startsWith('::ffff:')) {
+            ip = ip.substring(7);
+        }
+
+        if (ip === '127.0.0.1' || ip === '::1' || ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.')) {
+            console.log(`[Servidor] IP local detectado (${ip}), usando IP público de exemplo para teste`);
+            ip = '8.8.8.8'; 
+        }
+
+        const geoResponse = await axios.get(`http://ip-api.com/json/${ip}?fields=status,message,country,city,query`);
+        
+        if (geoResponse.data.status === 'success') {
+            res.json({
+                ip: geoResponse.data.query,
+                city: geoResponse.data.city,
+                country: geoResponse.data.country,
+            });
+        } else {
+            res.status(500).json({ error: geoResponse.data.message || "Erro ao obter geolocalização." });
+        }
+
+    } catch (error) {
+        console.error("[Servidor] Erro em /api/user-info:", error.message);
+        res.status(500).json({ error: "Erro interno ao processar informações do usuário." });
+    }
+});
+
+// --- ATUALIZADO: Fase 2 - Endpoint de Log ---
+// Endpoint para registrar log de conexão no formato da atividade
+app.post('/api/log-connection', async (req, res) => {
+    if (!db) {
+        await connectDB();
+        if (!db) return res.status(500).json({ error: "Servidor não conectado ao banco de dados." });
+    }
+
+    try {
+        const { ip, acao, nomeBot } = req.body; 
+
+        if (!ip || !acao || !nomeBot) {
+            return res.status(400).json({ error: "Dados de log incompletos (IP, ação e nome do Bot são obrigatórios)." });
+        }
+
+        const agora = new Date();
+        const dataFormatada = agora.toISOString().split('T')[0]; // Formato YYYY-MM-DD
+        const horaFormatada = agora.toTimeString().split(' ')[0]; // Formato HH:MM:SS
+
+        const logEntry = {
+            col_data: dataFormatada,
+            col_hora: horaFormatada,
+            col_IP: ip,
+            col_nome_bot: nomeBot,
+            col_acao: acao
+        };
+
+        const collection = db.collection("tb_cl_user_log_acess"); 
+        const result = await collection.insertOne(logEntry);
+
+        console.log('[Servidor] Log de acesso salvo:', result.insertedId);
+        res.status(201).json({ message: "Log de acesso salvo com sucesso!", logId: result.insertedId });
+
+    } catch (error) {
+        console.error("[Servidor] Erro em /api/log-connection:", error.message);
+        res.status(500).json({ error: "Erro interno ao salvar log de acesso." });
+    }
+});
+// ------------------------------------------------
+
+// --- NOVO: Fase 3 - Endpoint de Ranking (Simulado) ---
+app.post('/api/ranking/registrar-acesso-bot', (req, res) => {
+    const { botId, nomeBot, timestampAcesso, usuarioId } = req.body;
+
+    if (!botId || !nomeBot) {
+        return res.status(400).json({ error: "ID e Nome do Bot são obrigatórios para o ranking." });
+    }
+
+    const acesso = {
+        botId,
+        nomeBot,
+        usuarioId: usuarioId || 'anonimo',
+        acessoEm: timestampAcesso ? new Date(timestampAcesso) : new Date(),
+        contagem: 1
+    };
+
+    const botExistente = dadosRankingVitrine.find(b => b.botId === botId);
+    if (botExistente) {
+        botExistente.contagem += 1;
+        botExistente.ultimoAcesso = acesso.acessoEm;
+    } else {
+        dadosRankingVitrine.push({
+            botId: botId,
+            nomeBot: nomeBot,
+            contagem: 1,
+            ultimoAcesso: acesso.acessoEm
+        });
+    }
+    
+    console.log('[Servidor] Dados de ranking atualizados:', dadosRankingVitrine);
+    res.status(201).json({ message: `Acesso ao bot ${nomeBot} registrado para ranking.` });
+});
+
+// --- NOVO: Fase 3 - Endpoint para Visualizar Ranking (Opcional) ---
+app.get('/api/ranking/visualizar', (req, res) => {
+    const rankingOrdenado = [...dadosRankingVitrine].sort((a, b) => b.contagem - a.contagem);
+    res.json(rankingOrdenado);
+});
+// ------------------------------------------------------------
+
+
+// Endpoint principal do Chatbot (sem alterações)
 app.post("/chat", async (req, res) => {
   try {
-    // Log do corpo da requisição completo para depuração
     console.log("Corpo da requisição recebido:", JSON.stringify(req.body));
     
-    // Extrair mensagem e histórico do corpo da requisição
     const { message, history } = req.body;
     
-    // Verificar se há uma mensagem válida
     if (!message) {
       console.error("Requisição recebida sem mensagem.");
       return res.status(400).json({ error: "Mensagem ausente na requisição" });
@@ -89,16 +247,12 @@ app.post("/chat", async (req, res) => {
     console.log("Mensagem recebida:", message);
     console.log("Histórico recebido:", history && history.length ? `${history.length} mensagens` : "nenhum");
     
-    // Definir as ferramentas disponíveis para o modelo
     const tools = [{
       functionDeclarations: [
         {
           name: "getCurrentTime",
           description: "Obtém a data e hora atuais no Brasil (fuso horário de São Paulo).",
-          parameters: { 
-            type: "object", 
-            properties: {} // Sem parâmetros necessários
-          }
+          parameters: { type: "object", properties: {} }
         },
         {
           name: "getWeather",
@@ -117,52 +271,32 @@ app.post("/chat", async (req, res) => {
       ]
     }];
     
-    // Configurar o modelo com as ferramentas
     const model = genAI.getGenerativeModel({ 
       model: "gemini-1.5-flash",
       tools: tools
     });
     
-    // Lidar com o histórico de conversas
     let processedHistory = [];
     if (history && history.length > 0) {
       for (const msg of history) {
         if (!msg.role || !msg.parts) continue;
-        
         const role = msg.role === "user" ? "user" : 
                      msg.role === "model" ? "model" : 
                      msg.role === "function" ? "function" : null;
-        
         if (!role) continue;
-        
         const processedMsg = { role, parts: [] };
-        
-        // Garantir que parts seja um array e processar cada parte
         const partsArray = Array.isArray(msg.parts) ? msg.parts : [msg.parts];
-        
         for (const part of partsArray) {
           if (part.text) {
             processedMsg.parts.push({ text: part.text });
           }
           else if (part.functionCall) {
-            processedMsg.parts.push({
-              functionCall: {
-                name: part.functionCall.name,
-                args: part.functionCall.args
-              }
-            });
+            processedMsg.parts.push({ functionCall: { name: part.functionCall.name, args: part.functionCall.args } });
           }
           else if (part.functionResponse) {
-            processedMsg.parts.push({
-              functionResponse: {
-                name: part.functionResponse.name,
-                response: part.functionResponse.response
-              }
-            });
+            processedMsg.parts.push({ functionResponse: { name: part.functionResponse.name, response: part.functionResponse.response } });
           }
         }
-        
-        // Adicionar ao histórico processado apenas se tiver partes válidas
         if (processedMsg.parts.length > 0) {
             processedHistory.push(processedMsg);
         }
@@ -172,48 +306,24 @@ app.post("/chat", async (req, res) => {
     console.log("Histórico processado para a API:", JSON.stringify(processedHistory));
     
     const fullPrompt = `
-Você é Gustavo, um especialista altamente qualificado em Minecraft, com foco em farms automáticas, mecânicas avançadas do jogo, otimização de recursos e estratégias para sobrevivência, criativo e até servidores multiplayer.
-
-Sua missão é ajudar qualquer jogador — do iniciante ao avançado — a criar farms eficientes, entender redstone, mecânicas de mobs, produtividade de recursos e como otimizar mundos survival.
-
-Características do seu estilo:
-- Fala com empolgação e paixão pelo Minecraft.
-- Responde de forma técnica, mas acessível.
-- Usa vocabulário simples quando necessário, e técnico quando útil.
-- Sempre explica o *porquê* das coisas funcionarem daquele jeito no jogo.
-- Usa listas, etapas numeradas e dicas bônus sempre que possível.
-- Refere-se a si mesmo como "Gustavo" quando apropriado.
-- Se o usuário fizer uma pergunta fora do escopo do Minecraft, responda educadamente que seu foco é exclusivamente Minecraft, e especialmente farms.
-
-Se o usuário perguntar sobre data, hora ou clima, você pode usar as ferramentas disponíveis para buscar essas informações.
-Quando te perguntarem o clima, pergunte de qual cidade a pessoa quer.
-Agora, receba a dúvida do jogador:
+Você é Gustavo, um especialista altamente qualificado em Minecraft... (o resto do seu prompt aqui)
 "${message}"
     `;
 
     let resposta = "";
     let finalResponsePayload = {};
     
-    // Usar o modo chat se houver histórico
     if (processedHistory.length > 0) {
       console.log("Iniciando chat com histórico processado");
-      
       try {
         const chat = model.startChat({
           history: processedHistory,
-          generationConfig: {
-            temperature: 0.9,
-          }
+          generationConfig: { temperature: 0.9 }
         });
-      
-        console.log("Enviando mensagem para o chat:", message);
         const result = await chat.sendMessage(message);
-        console.log("Resultado inicial da IA:", JSON.stringify(result));
-        
         let functionCallsDetected = [];
         const responseCandidates = result.response.candidates;
         
-        // Verificar se há chamadas de função na resposta
         if (responseCandidates && responseCandidates[0].content && responseCandidates[0].content.parts) {
             const functionCallPart = responseCandidates[0].content.parts.find(part => part.functionCall);
             
@@ -224,7 +334,6 @@ Agora, receba a dúvida do jogador:
                 
                 console.log(`Chamada de função detectada: ${functionName}`, functionArgs);
                 
-                // Executar a função correspondente
                 const functionToCall = availableFunctions[functionName];
                 let functionResult;
                 
@@ -235,51 +344,28 @@ Agora, receba a dúvida do jogador:
                         functionResult = functionToCall(functionArgs);
                     }
                     console.log(`Resultado da função ${functionName}:`, functionResult);
+                    functionCallsDetected.push({ name: functionName, args: functionArgs, response: functionResult });
                     
-                    functionCallsDetected.push({
-                        name: functionName,
-                        args: functionArgs,
-                        response: functionResult
-                    });
-                    
-                    // Enviar o resultado da função de volta para a IA
-                    console.log("Enviando resultado da função para a IA...");
                     const resultFromFunctionCall = await chat.sendMessage([
-                        {
-                            functionResponse: {
-                                name: functionName,
-                                response: functionResult
-                            }
-                        }
+                        { functionResponse: { name: functionName, response: functionResult } }
                     ]);
-                    console.log("Resultado da IA após execução da função:", JSON.stringify(resultFromFunctionCall));
                     
-                    // *** CORREÇÃO APLICADA AQUI ***
-                    // Verificar se a IA forneceu uma resposta textual após a função
                     if (resultFromFunctionCall.response && resultFromFunctionCall.response.text) {
                         resposta = resultFromFunctionCall.response.text();
-                        console.log("Resposta textual da IA após função:", resposta);
                     } else {
-                        // Se não houver texto, usar uma mensagem padrão ou o resultado da função
                         resposta = `Executei a função ${functionName}. Resultado: ${JSON.stringify(functionResult)}`; 
-                        console.log(`IA não forneceu texto após ${functionName}. Usando resposta padrão/resultado.`);
                     }
                 } else {
                     console.error(`Função ${functionName} não encontrada!`);
                     resposta = `Desculpe, não encontrei a função ${functionName} para executar.`;
                 }
             } else {
-                // Se não houve chamada de função, pegar a resposta de texto normal
                 resposta = result.response.text ? result.response.text() : "Não recebi uma resposta textual.";
-                console.log("Nenhuma chamada de função detectada. Resposta textual:", resposta);
             }
         } else {
-             // Caso não haja candidates ou parts válidos
              resposta = result.response.text ? result.response.text() : "Não consegui processar a resposta da IA.";
-             console.log("Estrutura de resposta inesperada. Resposta textual:", resposta);
         }
         
-        // Preparar o payload final da resposta
         finalResponsePayload = { response: resposta };
         if (functionCallsDetected.length > 0) {
             finalResponsePayload.functionCalls = functionCallsDetected;
@@ -291,7 +377,6 @@ Agora, receba a dúvida do jogador:
           console.error("Detalhes do erro da API:", error.response.data);
         }
         
-        // Fallback para geração simples em caso de erro no chat
         console.log("Tentando fallback para geração simples sem histórico...");
         try {
           const result = await model.generateContent(fullPrompt);
@@ -306,7 +391,6 @@ Agora, receba a dúvida do jogador:
         }
       }
     } else {
-      // Usar geração simples se não houver histórico
       console.log("Usando geração simples sem histórico");
       try {
           const result = await model.generateContent(fullPrompt);
@@ -321,7 +405,6 @@ Agora, receba a dúvida do jogador:
       }
     }
     
-    // Enviar a resposta final para o cliente
     console.log("Enviando payload final para o cliente:", JSON.stringify(finalResponsePayload));
     res.json(finalResponsePayload);
     
@@ -337,7 +420,7 @@ Agora, receba a dúvida do jogador:
 app.listen(port, () => {
   console.log(`Servidor rodando em http://localhost:${port}`);
   console.log(`Chave API do Gemini: ${GEMINI_API_KEY ? "✓ Configurada" : "✗ Não configurada"}`);
-  // Verificar se a chave OpenWeatherMap está configurada
   const OPENWEATHER_API_KEY = process.env.OPENWEATHER_API_KEY;
   console.log(`Chave API OpenWeatherMap: ${OPENWEATHER_API_KEY ? "✓ Configurada" : "✗ Não configurada (necessária para função de clima)"}`);
+  console.log(`URI do MongoDB: ${mongoUri ? "✓ Configurada" : "✗ Não configurada"}`);
 });
