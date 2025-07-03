@@ -16,7 +16,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // --- CORRIGIDO: URL do backend ---
     // Ajuste esta URL para o seu ambiente.
     // Para produção, use a URL do seu serviço no Render. Ex: 'https://seu-app.onrender.com'
-    const backendUrl = 'http://localhost:3000/chat'; // Para produção no Render
+    const backendUrl = 'https://chatbot-gbxu.onrender.com'; // Para produção no Render
     // const backendUrl = 'http://localhost:3000'; // Para desenvolvimento local
 
     // --- ATUALIZADO: Função para registrar conexão do usuário (Fase 2) ---
