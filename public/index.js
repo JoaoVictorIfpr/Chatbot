@@ -26,8 +26,9 @@ document.addEventListener("DOMContentLoaded", () => {
             const logData = {
                 ip: userInfo.ip,
                 acao: "acesso_inicial_chatbot", // Ação definida pela atividade
-                nomeBot: "Gustavo - O Cara das Farm" // Nome do seu Bot
-                       const logResponse = await fetch(`${backendUrl}/api/log-connection`, {
+                nomeBot: "Gustavo - O Cara das Farm"
+            };
+            const logResponse = await fetch(`${backendUrl}/api/log-connection`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(logData),
@@ -359,7 +360,9 @@ document.addEventListener("DOMContentLoaded", () => {
     
     // --- ATUALIZADO: Trigger para registrar conexão e acesso ao ranking ---
     const registrarAcessoInicial = async () => {
-        try            const userInfoResponse = await fetch(`${backendUrl}/api/user-info`);           if (!userInfoResponse.ok) {
+        try {
+            const userInfoResponse = await fetch(`${backendUrl}/api/user-info`);
+            if (!userInfoResponse.ok) {
                 console.error("Falha ao obter user-info:", await userInfoResponse.text());
                 return;
             }
@@ -383,3 +386,5 @@ document.addEventListener("DOMContentLoaded", () => {
     
     registrarAcessoInicial();
 });
+
+
