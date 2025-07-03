@@ -14,7 +14,7 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 3000;
 
-app.use(cors({ origin: 'https://chatbot-omega-lemon.vercel.app' }));
+app.use(cors());
 app.use(bodyParser.json());
 app.use(express.json()); // Middleware para parsear corpo de requisição JSON
 
