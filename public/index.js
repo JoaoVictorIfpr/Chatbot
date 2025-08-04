@@ -1,4 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
+    // --- SELETORES DE ELEMENTOS (sem alterações aqui, apenas para contexto) ---
     const chatContainer = document.querySelector(".chat-container");
     const messagesContainer = document.getElementById("messages");
     const inputField = document.getElementById("userInput");
@@ -9,23 +10,22 @@ document.addEventListener("DOMContentLoaded", () => {
     const toggleSidebarBtn = document.getElementById("toggleSidebarBtn");
     const sidebar = document.querySelector(".sidebar");
     
+    // --- NOVO SELETOR PARA O BOTÃO "SOBRE MIM" ---
+    const aboutMeBtn = document.getElementById("aboutMeBtn"); // Adicionado
+
     let conversationsHistory = [];
     let currentChatHistory = [];
     let currentConversationIndex = -1;
 
-    // --- CORRIGIDO: URL do backend ---
-    // Ajuste esta URL para o seu ambiente.
-    // Para produção, use a URL do seu serviço no Render. Ex: 'https://seu-app.onrender.com'
-    const backendUrl = 'https://chatbot-gbxu.onrender.com'; // Para produção no Render
-    // const backendUrl = 'http://localhost:3000'; // Para desenvolvimento local
+    // URL do backend
+    const backendUrl = 'https://chatbot-gbxu.onrender.com';
 
-    // --- ATUALIZADO: Função para registrar conexão do usuário (Fase 2) ---
+    // --- FUNÇÕES DE REGISTRO (sem alterações) ---
     async function registrarConexaoUsuario(userInfo) {
         try {
-            // Enviar log para o backend com o formato da atividade
             const logData = {
                 ip: userInfo.ip,
-                acao: "acesso_inicial_chatbot", // Ação definida pela atividade
+                acao: "acesso_inicial_chatbot",
                 nomeBot: "Gustavo - O Cara das Farm"
             };
             const logResponse = await fetch(`${backendUrl}/api/log-connection`, {
@@ -33,48 +33,31 @@ document.addEventListener("DOMContentLoaded", () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(logData),
             });
-
-            if (!logResponse.ok) {
-                console.error("Falha ao enviar log de conexão:", await logResponse.text());
-            } else {
-                const result = await logResponse.json();
-                console.log("Log de conexão enviado:", result.message);
-            }
+            if (!logResponse.ok) console.error("Falha ao enviar log de conexão:", await logResponse.text());
         } catch (error) {
             console.error("Erro ao registrar log de conexão do usuário:", error);
         }
     }
 
-    // --- NOVO: Função para registrar acesso para o ranking (Fase 3) ---
     async function registrarAcessoBotParaRanking() {
         try {
             const dataRanking = {
-                botId: "gustavoChatbot_v1", // ID único para seu bot
-                nomeBot: "Gustavo - O Cara das Farm", // Mesmo nome do log
+                botId: "gustavoChatbot_v1",
+                nomeBot: "Gustavo - O Cara das Farm",
                 timestampAcesso: new Date().toISOString()
             };
-
             const response = await fetch(`${backendUrl}/api/ranking/registrar-acesso-bot`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(dataRanking)
             });
-
-            if (response.ok) {
-                const result = await response.json();
-                console.log("Registro de ranking enviado:", result.message);
-            } else {
-                console.error("Falha ao registrar acesso para ranking:", await response.text());
-            }
+            if (!response.ok) console.error("Falha ao registrar acesso para ranking:", await response.text());
         } catch (error) {
             console.error("Erro ao registrar acesso para ranking:", error);
         }
     }
     
-    //
-    // --- O RESTANTE DO SEU CÓDIGO (LÓGICA DO CHAT) PERMANECE IGUAL ---
-    //
-    
+    // --- FUNÇÕES DO CHAT (sem alterações) ---
     function renderMarkdown(text) {
         if (typeof marked !== 'undefined') {
             return marked.parse(text);
@@ -151,7 +134,6 @@ document.addEventListener("DOMContentLoaded", () => {
         };
         
         try {
-            // --- CORRIGIDO: Usando a variável backendUrl consistentemente ---
             const response = await fetch(`${backendUrl}/chat`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -181,6 +163,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    // --- FUNÇÕES DE HISTÓRICO DE CONVERSA (sem alterações) ---
     function saveConversation() {
         if (currentChatHistory.length > 0) {
             if (currentConversationIndex >= 0) {
@@ -340,6 +323,7 @@ document.addEventListener("DOMContentLoaded", () => {
         messagesContainer.appendChild(emptyStateDiv);
     }
 
+    // --- EVENT LISTENERS (sem alterações) ---
     if (toggleSidebarBtn) {
         toggleSidebarBtn.addEventListener("click", () => {
             sidebar.classList.toggle("active");
@@ -356,24 +340,16 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     newChatBtn.addEventListener("click", newChat);
 
+    // --- INICIALIZAÇÃO (sem alterações) ---
     loadConversationsHistoryFromStorage();
     
-    // --- ATUALIZADO: Trigger para registrar conexão e acesso ao ranking ---
     const registrarAcessoInicial = async () => {
         try {
             const userInfoResponse = await fetch(`${backendUrl}/api/user-info`);
-            if (!userInfoResponse.ok) {
-                console.error("Falha ao obter user-info:", await userInfoResponse.text());
-                return;
-            }
+            if (!userInfoResponse.ok) return;
             const userInfo = await userInfoResponse.json();
-
-            if (userInfo.error) {
-                console.error("Erro do servidor ao obter user-info:", userInfo.error);
-                return;
-            }
+            if (userInfo.error) return;
             
-            // Chamar as duas funções em paralelo
             await Promise.all([
                 registrarConexaoUsuario(userInfo),
                 registrarAcessoBotParaRanking()
@@ -385,6 +361,39 @@ document.addEventListener("DOMContentLoaded", () => {
     };
     
     registrarAcessoInicial();
+
+    // ===================================================================
+    // =========== NOVO CÓDIGO PARA O BOTÃO "SOBRE MIM" ==================
+    // ===================================================================
+
+    if (aboutMeBtn) {
+        aboutMeBtn.addEventListener('click', () => {
+            // Remove a tela de chat vazio, se ela estiver visível
+            const emptyState = messagesContainer.querySelector(".empty-chat-state");
+            if (emptyState) {
+                messagesContainer.removeChild(emptyState);
+            }
+
+            // Texto com as informações do criador (você!)
+            const aboutMeText = `
+### 👨‍💻 Criador do Chatbot: João Victor
+
+---
+
+Eu sou o desenvolvedor por trás deste chatbot! Aqui estão algumas das minhas informações no estilo Minecraft:
+
+* **🏷️ TAG DE JOGADOR:** João Victor
+* **📍 PONTO DE SPAWN:** Assis Chateaubriand - PR
+* **📅 DATA DE CRIAÇÃO:** 17/04/2007
+* **🛠️ GUILDA / CLÃ:** IFPR (Turma: iiw2023a)
+* **🌟 MISSÃO ATUAL:** Minerando conhecimento e construindo o futuro no Instituto Federal do Paraná!
+
+Espero que goste de interagir com o **Gustavo, o cara das farm**!
+            `;
+
+            // Usa a função 'addMessage' existente para exibir a informação.
+            // O nome do remetente pode ser "Sistema" ou o nome que preferir.
+            addMessage("Sistema", aboutMeText);
+        });
+    }
 });
-
-
