@@ -7,6 +7,7 @@ import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import { MongoClient, ServerApiVersion } from 'mongodb';
+import SessaoChat from './models/SessaoChat.js';
 
 // Configurar dotenv para carregar variáveis de ambiente
 dotenv.config();
@@ -439,4 +440,138 @@ app.listen(port, () => {
   const OPENWEATHER_API_KEY = process.env.OPENWEATHER_API_KEY;
   console.log(`Chave API OpenWeatherMap: ${OPENWEATHER_API_KEY ? "✓ Configurada" : "✗ Não configurada (necessária para função de clima)"}`);
   console.log(`URI do MongoDB: ${mongoUri ? "✓ Configurada" : "✗ Não configurada"}`);
+});
+
+
+// Endpoint DELETE para excluir histórico de chat
+app.delete("/api/chat/historicos/:id", async (req, res) => {
+  if (!db) {
+    await connectDB();
+    if (!db) return res.status(500).json({ error: "Servidor não conectado ao banco de dados." });
+  }
+  try {
+    const { id } = req.params;
+    const deletedSession = await SessaoChat.findByIdAndDelete(id);
+    if (!deletedSession) {
+      return res.status(404).json({ error: "Histórico não encontrado." });
+    }
+    res.status(200).json({ message: "Histórico excluído com sucesso!" });
+  } catch (error) {
+    console.error("Erro ao excluir histórico:", error);
+    if (error.name === "CastError") {
+      return res.status(400).json({ error: "ID de histórico inválido." });
+    }
+    res.status(500).json({ error: "Erro interno ao excluir histórico." });
+  }
+});
+
+
+
+
+// Endpoint POST para gerar título de chat
+app.post("/api/chat/historicos/:id/gerar-titulo", async (req, res) => {
+  if (!db) {
+    await connectDB();
+    if (!db) return res.status(500).json({ error: "Servidor não conectado ao banco de dados." });
+  }
+  try {
+    const { id } = req.params;
+    const session = await SessaoChat.findById(id);
+    if (!session) {
+      return res.status(404).json({ error: "Histórico não encontrado." });
+    }
+
+    const chatHistory = session.messages.map(msg => `${msg.role}: ${msg.parts[0].text}`).join("\n");
+
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const prompt = `Baseado nesta conversa, sugira um título curto e conciso de no máximo 5 palavras:\n\n${chatHistory}`;
+
+    const result = await model.generateContent(prompt);
+    const suggestedTitle = result.response.text();
+
+    res.status(200).json({ suggestedTitle });
+  } catch (error) {
+    console.error("Erro ao gerar título:", error);
+    res.status(500).json({ error: "Erro interno ao gerar título." });
+  }
+});
+
+
+
+
+// Endpoint PUT para salvar o título do chat
+app.put("/api/chat/historicos/:id", async (req, res) => {
+  if (!db) {
+    await connectDB();
+    if (!db) return res.status(500).json({ error: "Servidor não conectado ao banco de dados." });
+  }
+  try {
+    const { id } = req.params;
+    const { titulo } = req.body;
+
+    if (!titulo || titulo.trim() === "") {
+      return res.status(400).json({ error: "Título não fornecido ou vazio." });
+    }
+
+    const updatedSession = await SessaoChat.findByIdAndUpdate(
+      id,
+      { titulo: titulo },
+      { new: true }
+    );
+
+    if (!updatedSession) {
+      return res.status(404).json({ error: "Histórico não encontrado." });
+    }
+
+    res.status(200).json(updatedSession);
+  } catch (error) {
+    console.error("Erro ao salvar título:", error);
+    if (error.name === "CastError") {
+      return res.status(400).json({ error: "ID de histórico inválido." });
+    }
+    res.status(500).json({ error: "Erro interno ao salvar título." });
+  }
+});
+
+
+
+
+// Endpoint GET para listar históricos de chat
+app.get("/api/chat/historicos", async (req, res) => {
+  if (!db) {
+    await connectDB();
+    if (!db) return res.status(500).json({ error: "Servidor não conectado ao banco de dados." });
+  }
+  try {
+    const historicos = await SessaoChat.find({});
+    res.status(200).json(historicos);
+  } catch (error) {
+    console.error("Erro ao buscar históricos:", error);
+    res.status(500).json({ error: "Erro interno ao buscar históricos." });
+  }
+});
+
+
+
+
+// Endpoint GET para buscar histórico de chat por ID
+app.get("/api/chat/historicos/:id", async (req, res) => {
+  if (!db) {
+    await connectDB();
+    if (!db) return res.status(500).json({ error: "Servidor não conectado ao banco de dados." });
+  }
+  try {
+    const { id } = req.params;
+    const historico = await SessaoChat.findById(id);
+    if (!historico) {
+      return res.status(404).json({ error: "Histórico não encontrado." });
+    }
+    res.status(200).json(historico);
+  } catch (error) {
+    console.error("Erro ao buscar histórico por ID:", error);
+    if (error.name === "CastError") {
+      return res.status(400).json({ error: "ID de histórico inválido." });
+    }
+    res.status(500).json({ error: "Erro interno ao buscar histórico." });
+  }
 });
