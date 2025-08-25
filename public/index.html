@@ -1,28 +1,31 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
-<head>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gustavo, o cara das farm</title>
-  <link rel="icon" type="image/png" href="icone.png">
+  <link rel="icon" type="image/png" href="img/gustavocraft.png">
   <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
-</head>
 <body>
   <div class="app-container">
-    <div class="sidebar">
+    <!-- Sidebar -->
+    <div class="sidebar" id="sidebar">
       <div class="sidebar-header">
         <h2>Minhas Conversas</h2>
         <button id="newChatBtn" class="minecraft-button">Nova Conversa</button>
       </div>
       <div class="conversations-list" id="conversationsList">
-        </div>
+        <!-- Conversas serão adicionadas dinamicamente aqui -->
+      </div>
     </div>
 
+    <!-- Container principal -->
     <div class="container">
+      <!-- Header -->
       <header class="minecraft-header">
         <div class="header-content">
           <button id="toggleSidebarBtn" class="minecraft-button sidebar-toggle">≡</button>
@@ -35,17 +38,27 @@
         </div>
       </header>
       
+      <!-- Container do chat -->
       <div class="chat-container">
-        <div id="messages"></div>
+        <div id="messages">
+          <!-- Estado vazio do chat -->
+          <div class="empty-chat-state" id="emptyChatState">
+            <div class="empty-chat-icon">⛏️</div>
+            <h3>Olá, sou o Gustavo!</h3>
+            <p>Especialista em farms do Minecraft. Digite sua pergunta e vamos construir algo incrível!</p>
+          </div>
+        </div>
         
+        <!-- Área de input -->
         <div class="input-area">
-          <input type="text" id="userInput" placeholder="Digite uma mensagem..." autocomplete="off"/>
-          <button id="send-button" class="minecraft-button">Enviar</button>
+          <input type="text" id="userInput" placeholder="Digite sua pergunta sobre Minecraft...">
+          <button id="sendBtn" class="minecraft-button">Enviar</button>
         </div>
       </div>
     </div>
   </div>
-<script src="index.js"></script>
-<script src="client.js"></script>
+
+  <script src="index.js"></script>
+  <script src="client.js"></script>
 </body>
 </html>
