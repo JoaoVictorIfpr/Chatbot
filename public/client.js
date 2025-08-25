@@ -13,7 +13,8 @@ const aboutMeBtn = document.getElementById("aboutMeBtn");
 let currentChatHistory = [];
 let conversationsHistory = [];
 let currentConversationIndex = -1;
-const backendUrl = window.location.origin;
+// CORREÇÃO: URL do backend no Render
+const backendUrl = 'https://chatbot-gbxu.onrender.com';
 
 // --- FUNÇÕES AUXILIARES ---
 function renderMarkdown(text) {
@@ -113,6 +114,8 @@ async function sendMessage() {
     showTypingIndicator();
     
     try {
+        console.log('Enviando para:', `${backendUrl}/chat`); // Debug
+        
         const response = await fetch(`${backendUrl}/chat`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -121,6 +124,8 @@ async function sendMessage() {
                 history: currentChatHistory.slice(0, -1) // Envia o histórico sem a última mensagem do usuário
             }),
         });
+        
+        console.log('Status da resposta:', response.status); // Debug
         
         if (!response.ok) {
             throw new Error(`Erro do servidor: ${response.status}`);
@@ -136,7 +141,7 @@ async function sendMessage() {
     } catch (error) {
         console.error("Erro ao enviar mensagem:", error);
         removeTypingIndicator();
-        addBotMessage("❌ Erro ao se comunicar com o servidor. Tente novamente mais tarde.");
+        addBotMessage("⌚ Erro ao se comunicar com o servidor. Tente novamente mais tarde.");
     } finally {
         sendButton.disabled = false;
         sendButton.textContent = "Enviar";
@@ -328,7 +333,7 @@ Olá! Sou o Gustavo, especialista em Minecraft e farms automáticas!
 **Especialidades:**
 • 🌱 Farms de todos os tipos (mob, comida, materiais)
 • ⚙️ Mecânicas de redstone e automação
-• 🏗️ Construções eficientes e otimização
+• 🗃️ Construções eficientes e otimização
 • 💎 Estratégias de mineração e exploração
 • 🔧 Troubleshooting de projetos
 
