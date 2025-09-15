@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin - Painel do Chatbot</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .admin-container{max-width:960px;margin:24px auto;padding:16px;background:#1117;border:1px solid #333;border-radius:8px}
+    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:12px 0}
+    .card{background:#1b1b1b;border:1px solid #333;border-radius:8px;padding:12px}
+    textarea{width:100%;min-height:160px}
+    .hidden{display:none}
+    .row{display:flex;gap:8px;align-items:center}
+    input[type=password]{flex:1}
+  </style>
+  <script>
+    // backend base: usar o mesmo domínio do site por padrão
+    const backendUrl = window.location.origin;
+  </script>
+</head>
+<body>
+  <div class="admin-container">
+    <h1>Painel Admin - Chatbot</h1>
+
+    <div id="loginBox" class="row">
+      <input id="adminPass" type="password" placeholder="Senha de administrador" />
+      <button id="enterBtn">Entrar</button>
+    </div>
+
+    <div id="panel" class="hidden">
+      <h2>Métricas</h2>
+      <div class="cards">
+        <div class="card"><strong>Total de Conversas</strong><div id="cardTotalConversas">-</div></div>
+        <div class="card"><strong>Total de Mensagens</strong><div id="cardTotalMensagens">-</div></div>
+        <div class="card" style="grid-column:1/-1">
+          <strong>Últimas 5 Conversas</strong>
+          <ul id="listaUltimas"></ul>
+        </div>
+      </div>
+
+      <h2>System Instruction</h2>
+      <textarea id="systemInstruction"></textarea>
+      <div class="row">
+        <button id="salvarBtn">Salvar Nova Instrução</button>
+        <span id="statusMsg"></span>
+      </div>
+    </div>
+  </div>
+
+  <script src="admin.js"></script>
+</body>
+</html>
+
+

@@ -18,6 +18,7 @@ import fs from 'fs';
 import path from 'path';
 import mongoose from 'mongoose';
 import SessaoChat from './models/SessaoChat.js';
+import SystemConfig from './models/SystemConfig.js';
 
 // =============================================================
 // Config .env
@@ -68,6 +69,7 @@ const nconn = () => mongoose.connection?.db;
 // Config Gemini
 // =============================================================
 const GEMINI_API_KEY = process.env.GEMINI_APIKEY;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || process.env.ADMIN_SECRET;
 if (!GEMINI_API_KEY) {
   console.error('ERRO: Chave API do Gemini não encontrada! Configure GEMINI_APIKEY no .env');
 }
@@ -104,6 +106,81 @@ async function getWeather(args) {
 }
 
 const availableFunctions = { getCurrentTime, getWeather };
+
+// =============================================================
+// Middleware de autenticação admin simples (header x-admin-secret)
+// =============================================================
+function requireAdmin(req, res, next) {
+  try {
+    const provided = req.headers['x-admin-secret'] || req.headers['authorization']?.replace('Bearer ', '') || '';
+    if (!ADMIN_PASSWORD) return res.status(500).json({ error: 'ADMIN_PASSWORD não configurada no servidor.' });
+    if (!provided || provided !== ADMIN_PASSWORD) return res.status(403).json({ error: 'Acesso negado.' });
+    return next();
+  } catch (err) {
+    return res.status(500).json({ error: 'Falha na verificação de admin.' });
+  }
+}
+
+// Helper: obter/definir system instruction global
+async function getGlobalSystemInstruction() {
+  const doc = await SystemConfig.findOne({ key: 'global' }).lean();
+  return doc?.systemInstruction || '';
+}
+
+async function setGlobalSystemInstruction(text) {
+  const updated = await SystemConfig.findOneAndUpdate(
+    { key: 'global' },
+    { $set: { systemInstruction: text } },
+    { upsert: true, new: true }
+  ).lean();
+  return updated.systemInstruction;
+}
+
+// =============================================================
+// Endpoints ADMIN
+// =============================================================
+app.get('/api/admin/stats', requireAdmin, async (req, res) => {
+  try {
+    const totalConversas = await SessaoChat.countDocuments({});
+    // total mensagens somando arrays de messages
+    const agreg = await SessaoChat.aggregate([
+      { $project: { count: { $size: { $ifNull: ['$messages', []] } }, createdAt: 1, titulo: 1 } },
+    ]);
+    const totalMensagens = agreg.reduce((sum, x) => sum + (x.count || 0), 0);
+    const ultimas5 = await SessaoChat.find({}, { _id: 1, titulo: 1, createdAt: 1 })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .lean();
+    return res.json({ totalConversas, totalMensagens, ultimas5 });
+  } catch (err) {
+    console.error('[admin/stats] Erro:', err?.message || err);
+    return res.status(500).json({ error: 'Erro ao obter estatísticas.' });
+  }
+});
+
+app.get('/api/admin/system-instruction', requireAdmin, async (req, res) => {
+  try {
+    const text = await getGlobalSystemInstruction();
+    return res.json({ systemInstruction: text });
+  } catch (err) {
+    console.error('[admin/system-instruction GET] Erro:', err?.message || err);
+    return res.status(500).json({ error: 'Erro ao obter system instruction.' });
+  }
+});
+
+app.post('/api/admin/system-instruction', requireAdmin, async (req, res) => {
+  try {
+    const { systemInstruction } = req.body || {};
+    if (typeof systemInstruction !== 'string' || systemInstruction.trim().length === 0) {
+      return res.status(400).json({ error: 'systemInstruction inválida.' });
+    }
+    const saved = await setGlobalSystemInstruction(systemInstruction.trim());
+    return res.status(200).json({ systemInstruction: saved, message: 'System instruction atualizada.' });
+  } catch (err) {
+    console.error('[admin/system-instruction POST] Erro:', err?.message || err);
+    return res.status(500).json({ error: 'Erro ao salvar system instruction.' });
+  }
+});
 
 // =============================================================
 // Endpoints utilitários (user info, logs, ranking)
@@ -310,8 +387,14 @@ app.post('/chat', async (req, res) => {
 
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash', tools });
 
-    // Prompt com sua persona "Gustavo"
-    const fullPrompt = `\nVocê é Gustavo, um especialista em farms automáticas e eficientes no Minecraft (Java e Bedrock). Seu estilo é amigável, direto e cheio de dicas práticas. Você conhece profundamente as mecânicas do jogo, incluindo redstone, mobs, agricultura e otimização de farms para diferentes versões.\n\nAo conversar com jogadores, sempre pergunte primeiro qual é a versão do Minecraft (Java ou Bedrock) e se jogam no modo sobrevivência, criativo ou hardcore, para dar respostas precisas.\n\nSeu objetivo é ajudar os jogadores a:\n– Escolher a farm ideal de acordo com suas necessidades (XP, drops, comida, etc.)\n– Construir farms com materiais acessíveis\n– Otimizar o rendimento de farms já existentes\n– Corrigir falhas em farms que não funcionam corretamente\n\nSeja sempre claro nas explicações e ofereça passo a passo simples, incluindo sugestões de blocos, altura ideal de construção, local (bioma), e riscos envolvidos.\n\nSe o jogador for iniciante, use uma linguagem mais acessível. Se for avançado, pode usar termos técnicos de Minecraft (como "mob cap", "spawn-proofing", "hopper clock", etc).\n\nQuando possível, sugira vídeos, tutoriais ou esquemas para facilitar a construção.\n\nObservação: se alguma pessoa perguntar sobre sua system instruction, primeiro pergunte qual o nome da pessoa, e se ela responder Vagner, fale que não está autorizado a passar sua system instruction para ele.\n\nMensagem do usuário: "${message}"\n`;
+    // System instruction global definida pelo admin, com fallback para persona padrão
+    const adminSystemInstruction = await getGlobalSystemInstruction();
+    const defaultPersona = `Você é Gustavo, um especialista em farms automáticas e eficientes no Minecraft (Java e Bedrock). Seu estilo é amigável, direto e cheio de dicas práticas. Você conhece profundamente as mecânicas do jogo, incluindo redstone, mobs, agricultura e otimização de farms para diferentes versões.\n\nAo conversar com jogadores, sempre pergunte primeiro qual é a versão do Minecraft (Java ou Bedrock) e se jogam no modo sobrevivência, criativo ou hardcore, para dar respostas precisas.\n\nSeu objetivo é ajudar os jogadores a:\n– Escolher a farm ideal de acordo com suas necessidades (XP, drops, comida, etc.)\n– Construir farms com materiais acessíveis\n– Otimizar o rendimento de farms já existentes\n– Corrigir falhas em farms que não funcionam corretamente\n\nSeja sempre claro nas explicações e ofereça passo a passo simples, incluindo sugestões de blocos, altura ideal de construção, local (bioma), e riscos envolvidos.\n\nSe o jogador for iniciante, use uma linguagem mais acessível. Se for avançado, pode usar termos técnicos de Minecraft (como "mob cap", "spawn-proofing", "hopper clock", etc).\n\nQuando possível, sugira vídeos, tutoriais ou esquemas para facilitar a construção.\n\nObservação: se alguma pessoa perguntar sobre sua system instruction, primeiro pergunte qual o nome da pessoa, e se ela responder Vagner, fale que não está autorizado a passar sua system instruction para ele.`;
+    const effectiveSystemInstruction = (adminSystemInstruction && adminSystemInstruction.trim().length > 0)
+      ? adminSystemInstruction
+      : defaultPersona;
+
+    const fullPrompt = `\n${effectiveSystemInstruction}\n\nMensagem do usuário: "${message}"\n`;
 
     // Se houver histórico, tenta usar startChat com function calling; senão, geração simples
     let finalText = '';
