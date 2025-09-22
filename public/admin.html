@@ -6,13 +6,41 @@
   <title>Admin - Painel do Chatbot</title>
   <link rel="stylesheet" href="style.css" />
   <style>
-    .admin-container{max-width:960px;margin:24px auto;padding:16px;background:#1117;border:1px solid #333;border-radius:8px}
-    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:12px 0}
-    .card{background:#1b1b1b;border:1px solid #333;border-radius:8px;padding:12px}
-    textarea{width:100%;min-height:160px}
+    :root{--bg:#0a0e14;--panel:#0f1621;--muted:#9aa4b2;--border:#1b2430;--accent:#78ffd6;--accent2:#a8eb12;--danger:#ff6b6b}
+    body{background:radial-gradient(1200px 600px at 10% -10%, rgba(120,255,214,.08), transparent),radial-gradient(900px 500px at 100% 0%, rgba(168,235,18,.06), transparent), var(--bg);color:#e6edf3}
+    .admin-container{max-width:980px;margin:32px auto;padding:16px}
+    .admin-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+    .admin-title{display:flex;align-items:center;gap:10px}
+    .admin-badge{font-size:12px;color:var(--muted)}
+    .panel{background:linear-gradient(180deg, rgba(15,22,33,.9), rgba(10,14,20,.9));border:1px solid var(--border);border-radius:14px;padding:18px;box-shadow:0 0 0 1px rgba(120,255,214,.05) inset, 0 12px 30px rgba(0,0,0,.35);opacity:0;transform:translateY(8px);transition:opacity .35s ease, transform .35s ease}
+    .panel.show{opacity:1;transform:translateY(0)}
+    .toolbar{display:flex;align-items:center;gap:8px;justify-content:space-between;margin:8px 0}
+    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin:12px 0}
+    .card{background:linear-gradient(160deg, rgba(17,22,29,.95), rgba(17,22,29,.75));border:1px solid var(--border);border-radius:14px;padding:16px;position:relative;overflow:hidden}
+    .card::before{content:"";position:absolute;inset:-1px;border-radius:15px;padding:1px;background:linear-gradient(120deg, rgba(120,255,214,.5), rgba(168,235,18,.35), transparent 60%);-webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;opacity:.3}
+    .card strong{display:block;margin-bottom:6px;color:#c8d1dc}
+    .card .big{font-size:28px;font-weight:700}
+    .card .icon{position:absolute;right:12px;top:12px;opacity:.2;font-size:40px}
+    textarea{width:100%;min-height:200px;background:linear-gradient(180deg,#0b1017,#0a0f16);border:1px solid var(--border);color:#e6edf3;border-radius:10px;padding:12px;box-shadow:0 0 0 1px rgba(120,255,214,.05) inset}
+    .skeleton{position:relative;overflow:hidden;background:#0f1414}
+    .skeleton::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.06),transparent);animation:shimmer 1.2s infinite}
+    @keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
     .hidden{display:none}
     .row{display:flex;gap:8px;align-items:center}
-    input[type=password]{flex:1}
+    .login-box{display:flex;gap:10px;align-items:center;background:linear-gradient(180deg, rgba(15,22,33,.9), rgba(10,14,20,.9));border:1px solid var(--border);border-radius:12px;padding:12px 14px;box-shadow:0 8px 24px rgba(0,0,0,.35);transition:opacity .3s ease, transform .3s ease}
+    .login-box.fade-out{opacity:0;transform:translateY(-6px);pointer-events:none}
+    .input-wrap{position:relative;flex:1}
+    .input-wrap .leading{position:absolute;left:10px;top:50%;transform:translateY(-50%);opacity:.6}
+    input[type=password]{flex:1;background:#0b1017;border:1px solid var(--border);color:#e6edf3;border-radius:10px;padding:10px 12px 10px 34px;outline:none}
+    .btn{cursor:pointer;background:#111b27;border:1px solid var(--border);color:#e6edf3;border-radius:10px;padding:10px 12px;transition:transform .08s ease, box-shadow .2s ease}
+    .btn:hover{box-shadow:0 0 0 1px rgba(120,255,214,.25), 0 6px 20px rgba(120,255,214,.12)}
+    .btn:active{transform:translateY(1px)}
+    .btn.primary{background:linear-gradient(90deg, var(--accent), var(--accent2));border-color:rgba(120,255,214,.5);color:#0b130b}
+    .btn.ghost{background:transparent}
+    .status{margin-left:8px;font-size:14px}
+    .status.error{color:var(--danger)}
+    .status.ok{color:var(--accent)}
+    .muted{color:var(--muted)}
   </style>
   <script>
     // backend base: usar o mesmo domínio do site por padrão
@@ -21,18 +49,37 @@
 </head>
 <body>
   <div class="admin-container">
-    <h1>Painel Admin - Chatbot</h1>
-
-    <div id="loginBox" class="row">
-      <input id="adminPass" type="password" placeholder="Senha de administrador" />
-      <button id="enterBtn">Entrar</button>
+    <div class="admin-header">
+      <div class="admin-title">
+        <img src="img/gustavocraft.png" alt="avatar" style="width:36px;height:36px;border-radius:6px;border:1px solid var(--border)">
+        <div>
+          <h1 style="margin:0">Painel Admin</h1>
+          <span class="admin-badge">Acesso restrito</span>
+        </div>
+      </div>
+      <a class="btn ghost" href="index.html">Voltar</a>
     </div>
 
-    <div id="panel" class="hidden">
-      <h2>Métricas</h2>
+    <div id="loginBox" class="login-box">
+      <div class="input-wrap">
+        <span class="leading">🔒</span>
+        <input id="adminPass" type="password" placeholder="Senha de administrador" />
+      </div>
+      <button id="enterBtn" class="btn primary">Entrar</button>
+      <span id="loginStatus" class="status"></span>
+    </div>
+
+    <div id="panel" class="panel hidden">
+      <div class="toolbar">
+        <h2 style="margin:0">Métricas</h2>
+        <div class="row">
+          <button id="refreshBtn" class="btn">Atualizar</button>
+          <span id="lastUpdated" class="muted" style="font-size:12px"></span>
+        </div>
+      </div>
       <div class="cards">
-        <div class="card"><strong>Total de Conversas</strong><div id="cardTotalConversas">-</div></div>
-        <div class="card"><strong>Total de Mensagens</strong><div id="cardTotalMensagens">-</div></div>
+        <div class="card"><span class="icon">💬</span><strong>Total de Conversas</strong><div id="cardTotalConversas" class="big">-</div></div>
+        <div class="card"><span class="icon">✉️</span><strong>Total de Mensagens</strong><div id="cardTotalMensagens" class="big">-</div></div>
         <div class="card" style="grid-column:1/-1">
           <strong>Últimas 5 Conversas</strong>
           <ul id="listaUltimas"></ul>
@@ -40,10 +87,11 @@
       </div>
 
       <h2>System Instruction</h2>
+      <p class="muted" style="margin-top:-8px">Esta mensagem define a personalidade padrão do bot para novas conversas.</p>
       <textarea id="systemInstruction"></textarea>
-      <div class="row">
-        <button id="salvarBtn">Salvar Nova Instrução</button>
-        <span id="statusMsg"></span>
+      <div class="row" style="margin-top:8px">
+        <button id="salvarBtn" class="btn primary">Salvar Nova Instrução</button>
+        <span id="statusMsg" class="status"></span>
       </div>
     </div>
   </div>
