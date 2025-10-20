@@ -17,6 +17,7 @@ import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import mongoose from 'mongoose';
+import { connectToDatabase, mongoDb } from './db/index.js';
 import SessaoChat from './models/SessaoChat.js';
 import SystemConfig from './models/SystemConfig.js';
 
@@ -44,31 +45,42 @@ if (fs.existsSync(PUBLIC_DIR)) {
 }
 
 // =============================================================
-// Conexão com MongoDB — Mongoose
+// Conexão com MongoDB — centralizada em db/index.js
 // =============================================================
 const mongoUri = process.env.MONGO_URI;
 if (!mongoUri) {
   console.error('[BOOT] MONGO_URI não encontrada no .env');
 }
+await connectToDatabase(mongoUri)
+  .then(() => console.log('✓ Conectado ao MongoDB'))
+  .catch((err) => console.error('✗ Falha ao conectar ao MongoDB:', err?.message || err));
 
-// Usa a conexão global do mongoose.
-await mongoose
-  .connect(mongoUri, {
-    serverSelectionTimeoutMS: 12000,
-    dbName: undefined, // usa o nome do DB presente na connection string
-  })
-  .then(() => console.log('✓ Conectado ao MongoDB (mongoose)'))
-  .catch((err) => {
-    console.error('✗ Falha ao conectar ao MongoDB (mongoose):', err?.message || err);
-  });
+// Acesso direto à conexão nativa quando necessário (coleções avulsas)
+const nconn = () => mongoDb();
 
-// Acesso direto à connection nativa quando necessário (coleções avulsas)
-const nconn = () => mongoose.connection?.db;
+// =============================================================
+// Healthcheck
+// =============================================================
+app.get('/api/health', async (req, res) => {
+  try {
+    const state = mongoose.connection.readyState; // 0=disconnected,1=connected,2=connecting,3=disconnecting
+    const dbOk = state === 1;
+    res.status(dbOk ? 200 : 500).json({
+      app: 'ok',
+      db: dbOk ? 'connected' : 'not-connected',
+      state,
+      geminiModel: GEMINI_MODEL,
+    });
+  } catch (err) {
+    res.status(500).json({ app: 'error', error: err?.message || 'unknown' });
+  }
+});
 
 // =============================================================
 // Config Gemini
 // =============================================================
 const GEMINI_API_KEY = process.env.GEMINI_APIKEY;
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || process.env.ADMIN_SECRET;
 if (!GEMINI_API_KEY) {
   console.error('ERRO: Chave API do Gemini não encontrada! Configure GEMINI_APIKEY no .env');
@@ -158,6 +170,121 @@ app.get('/api/admin/stats', requireAdmin, async (req, res) => {
   }
 });
 
+// Dashboard avançado
+app.get('/api/admin/dashboard', requireAdmin, async (req, res) => {
+  try {
+    // Profundidade de engajamento
+    const engajamento = await SessaoChat.aggregate([
+      { $addFields: { numeroDeMensagens: { $size: { $ifNull: ['$messages', []] } } } },
+      {
+        $group: {
+          _id: null,
+          duracaoMedia: { $avg: '$numeroDeMensagens' },
+          conversasCurtas: {
+            $sum: { $cond: [{ $lte: ['$numeroDeMensagens', 3] }, 1, 0] }
+          },
+          conversasLongas: {
+            $sum: { $cond: [{ $gt: ['$numeroDeMensagens', 3] }, 1, 0] }
+          }
+        }
+      },
+      { $project: { _id: 0 } }
+    ]);
+
+    const profundidade = engajamento?.[0] || { duracaoMedia: 0, conversasCurtas: 0, conversasLongas: 0 };
+
+    // Lealdade do usuário (Top 5 por número de sessões)
+    const topUsuarios = await SessaoChat.aggregate([
+      { $match: { userId: { $exists: true, $ne: null } } },
+      { $group: { _id: '$userId', totalSessoes: { $sum: 1 }, ultima: { $max: '$createdAt' } } },
+      { $sort: { totalSessoes: -1, ultima: -1 } },
+      { $limit: 5 },
+      { $project: { _id: 0, userId: '$_id', totalSessoes: 1, ultima: 1 } }
+    ]);
+
+    // Análise de falhas: respostas do bot contendo padrões de falha
+    const padroesFalha = [
+      'não entendi', 'nao entendi', 'não posso ajudar', 'nao posso ajudar',
+      'pode reformular', 'não sei responder', 'nao sei responder', 'desculpe'
+    ];
+    // Busca últimas 10 conversas com alguma resposta do bot que contenha um desses termos
+    const conversasComFalha = await SessaoChat.aggregate([
+      { $match: { messages: { $exists: true, $type: 'array', $ne: [] } } },
+      { $project: { messages: 1, titulo: 1, createdAt: 1 } },
+      { $addFields: {
+          falhas: {
+            $filter: {
+              input: '$messages',
+              as: 'm',
+              cond: {
+                $and: [
+                  { $eq: ['$$m.role', 'model'] },
+                  {
+                    $gt: [
+                      {
+                        $size: {
+                          $filter: {
+                            input: '$$m.parts',
+                            as: 'p',
+                            cond: {
+                              $regexMatch: {
+                                input: { $ifNull: ['$$p.text', ''] },
+                                regex: new RegExp(padroesFalha.join('|'), 'i')
+                              }
+                            }
+                          }
+                        }
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      { $match: { 'falhas.0': { $exists: true } } },
+      { $project: {
+          titulo: 1,
+          createdAt: 1,
+          // pega trechos: primeira user pergunta e primeira resposta fraca
+          exemplo: {
+            pergunta: {
+              $let: {
+                vars: { u: { $first: { $filter: { input: '$messages', as: 'm', cond: { $eq: ['$$m.role', 'user'] } } } } },
+                in: {
+                  $let: {
+                    vars: { t: { $arrayElemAt: [ { $map: { input: { $ifNull: ['$$u.parts', []] }, as: 'p', in: '$$p.text' } }, 0 ] } },
+                    in: { $ifNull: ['$$t', ''] }
+                  }
+                }
+              }
+            },
+            respostaFraca: {
+              $let: {
+                vars: { r: { $first: '$falhas' } },
+                in: {
+                  $let: {
+                    vars: { t: { $arrayElemAt: [ { $map: { input: { $ifNull: ['$$r.parts', []] }, as: 'p', in: '$$p.text' } }, 0 ] } },
+                    in: { $ifNull: ['$$t', ''] }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      { $sort: { createdAt: -1 } },
+      { $limit: 10 }
+    ]);
+
+    res.json({ profundidade, topUsuarios, conversasComFalha });
+  } catch (err) {
+    console.error('[admin/dashboard] Erro:', err?.message || err);
+    res.status(500).json({ error: 'Erro ao montar dashboard.' });
+  }
+});
 app.get('/api/admin/system-instruction', requireAdmin, async (req, res) => {
   try {
     const text = await getGlobalSystemInstruction();
@@ -342,7 +469,7 @@ app.post('/api/chat/historicos/:id/gerar-titulo', async (req, res) => {
       .map((m) => `${m.role}: ${m.parts?.[0]?.text || ''}`)
       .join('\n');
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
     const prompt = `Baseado nesta conversa, sugira um título curto e conciso de no máximo 5 palavras:\n\n${chatHistory}`;
 
     const result = await model.generateContent(prompt);
@@ -356,10 +483,40 @@ app.post('/api/chat/historicos/:id/gerar-titulo', async (req, res) => {
 });
 
 // =============================================================
+// Endpoints de DEBUG (verificar rapidamente o MongoDB)
+// =============================================================
+app.post('/api/debug/mongo/insert-sample', async (req, res) => {
+  try {
+    const sample = new SessaoChat({
+      titulo: 'Teste Mongo ' + new Date().toLocaleString('pt-BR'),
+      messages: [{ role: 'user', parts: [{ text: 'ping' }], timestamp: Date.now() }],
+    });
+    const saved = await sample.save();
+    res.status(201).json({ message: 'Inserido com sucesso', _id: saved._id });
+  } catch (err) {
+    console.error('[debug insert] Erro:', err?.message || err);
+    res.status(500).json({ error: 'Falha ao inserir sample: ' + (err?.message || 'desconhecido') });
+  }
+});
+
+app.get('/api/debug/mongo/list', async (req, res) => {
+  try {
+    const docs = await SessaoChat.find({}, { titulo: 1, createdAt: 1 }).sort({ createdAt: -1 }).limit(10).lean();
+    res.json(docs);
+  } catch (err) {
+    console.error('[debug list] Erro:', err?.message || err);
+    res.status(500).json({ error: 'Falha ao listar: ' + (err?.message || 'desconhecido') });
+  }
+});
+
+// =============================================================
 // Endpoint principal /chat (Gemini)
 // =============================================================
 app.post('/chat', async (req, res) => {
   try {
+    if (!GEMINI_API_KEY) {
+      return res.status(500).json({ error: 'Servidor sem GEMINI_APIKEY configurada. Defina GEMINI_APIKEY nas variáveis de ambiente.' });
+    }
     const { message, history } = req.body || {};
     if (!message) return res.status(400).json({ error: 'Mensagem ausente na requisição.' });
 
@@ -385,7 +542,7 @@ app.post('/chat', async (req, res) => {
       },
     ];
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash', tools });
+    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL, tools });
 
     // System instruction global definida pelo admin, com fallback para persona padrão
     const adminSystemInstruction = await getGlobalSystemInstruction();
@@ -447,7 +604,7 @@ app.post('/chat', async (req, res) => {
 
     res.json({ response: finalText });
   } catch (err) {
-    console.error('[POST /chat] Erro:', err?.message || err);
+    console.error('[POST /chat] Erro:', err?.stack || err?.message || err);
     res.status(500).json({ error: 'Erro interno no chat: ' + (err?.message || 'desconhecido') });
   }
 });
@@ -460,4 +617,5 @@ app.listen(port, () => {
   console.log(`Gemini API Key: ${GEMINI_API_KEY ? '✓ Configurada' : '✗ NÃO configurada'}`);
   console.log(`OpenWeather API Key: ${process.env.OPENWEATHER_API_KEY ? '✓' : '✗ NÃO configurada'}`);
   console.log(`Mongo URI: ${mongoUri ? '✓ Configurada' : '✗ NÃO configurada'}`);
+  console.log(`Gemini Model: ${GEMINI_MODEL}`);
 });

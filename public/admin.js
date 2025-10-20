@@ -13,7 +13,11 @@
   const loginStatus = document.getElementById('loginStatus');
   const cardTotalConversas = document.getElementById('cardTotalConversas');
   const cardTotalMensagens = document.getElementById('cardTotalMensagens');
+  const cardDuracaoMedia = document.getElementById('cardDuracaoMedia');
+  const cardCurtaLonga = document.getElementById('cardCurtaLonga');
   const listaUltimas = document.getElementById('listaUltimas');
+  const listaTopUsuarios = document.getElementById('listaTopUsuarios');
+  const listaFalhas = document.getElementById('listaFalhas');
   const textarea = document.getElementById('systemInstruction');
   const salvarBtn = document.getElementById('salvarBtn');
   const statusMsg = document.getElementById('statusMsg');
@@ -40,13 +44,25 @@
     // skeleton state
     cardTotalConversas.classList.add('skeleton');
     cardTotalMensagens.classList.add('skeleton');
+    if (cardDuracaoMedia) cardDuracaoMedia.classList.add('skeleton');
+    if (cardCurtaLonga) cardCurtaLonga.classList.add('skeleton');
     listaUltimas.classList.add('skeleton');
-    const resp = await fetch(`${backendUrl}/api/admin/stats`, {
+    if (listaTopUsuarios) listaTopUsuarios.classList.add('skeleton');
+    if (listaFalhas) listaFalhas.classList.add('skeleton');
+    const [respStats, respDash] = await Promise.all([
+      fetch(`${backendUrl}/api/admin/stats`, {
       headers: { 'x-admin-secret': secret, 'Authorization': `Bearer ${secret}` },
       cache: 'no-store'
-    });
-    if (!resp.ok) throw new Error('Falha ao obter stats');
-    const data = await resp.json();
+      }),
+      fetch(`${backendUrl}/api/admin/dashboard`, {
+        headers: { 'x-admin-secret': secret, 'Authorization': `Bearer ${secret}` },
+        cache: 'no-store'
+      })
+    ]);
+    if (!respStats.ok) throw new Error('Falha ao obter stats');
+    if (!respDash.ok) throw new Error('Falha ao obter dashboard');
+    const data = await respStats.json();
+    const dash = await respDash.json();
     cardTotalConversas.textContent = data.totalConversas ?? '-';
     cardTotalMensagens.textContent = data.totalMensagens ?? '-';
     listaUltimas.innerHTML = '';
@@ -56,11 +72,57 @@
       li.textContent = `${c.titulo || 'Sem título'}${d ? ' — ' + d.toLocaleString('pt-BR') : ''}`;
       listaUltimas.appendChild(li);
     });
+
+    // dashboard widgets
+    if (cardDuracaoMedia && dash.profundidade) {
+      const media = dash.profundidade.duracaoMedia || 0;
+      cardDuracaoMedia.textContent = media.toFixed(1);
+    }
+    if (cardCurtaLonga && dash.profundidade) {
+      const c = dash.profundidade.conversasCurtas || 0;
+      const l = dash.profundidade.conversasLongas || 0;
+      cardCurtaLonga.textContent = `${c} curtas / ${l} longas`;
+    }
+    if (listaTopUsuarios) {
+      listaTopUsuarios.innerHTML = '';
+      const tu = dash.topUsuarios || [];
+      if (tu.length === 0) {
+        const li = document.createElement('li');
+        li.className = 'muted';
+        li.textContent = 'Sem dados suficientes.';
+        listaTopUsuarios.appendChild(li);
+      }
+      tu.forEach((u) => {
+        const li = document.createElement('li');
+        const dataUlt = u.ultima ? new Date(u.ultima).toLocaleString('pt-BR') : '-';
+        li.textContent = `${u.userId || '(sem userId)'} — ${u.totalSessoes} sessões — ${dataUlt}`;
+        listaTopUsuarios.appendChild(li);
+      });
+    }
+    if (listaFalhas) {
+      listaFalhas.innerHTML = '';
+      const fl = dash.conversasComFalha || [];
+      if (fl.length === 0) {
+        const li = document.createElement('li');
+        li.className = 'muted';
+        li.textContent = 'Nenhuma falha recente detectada.';
+        listaFalhas.appendChild(li);
+      }
+      fl.forEach((f) => {
+        const li = document.createElement('li');
+        li.innerHTML = `<strong>${f.titulo || 'Sem título'}</strong> — ${new Date(f.createdAt).toLocaleString('pt-BR')}<br><em>Q:</em> ${f.exemplo?.pergunta || ''}<br><em>R:</em> ${f.exemplo?.respostaFraca || ''}`;
+        listaFalhas.appendChild(li);
+      });
+    }
     const now = new Date();
     if (lastUpdated) lastUpdated.textContent = `Atualizado às ${now.toLocaleTimeString('pt-BR')}`;
     cardTotalConversas.classList.remove('skeleton');
     cardTotalMensagens.classList.remove('skeleton');
     listaUltimas.classList.remove('skeleton');
+    if (cardDuracaoMedia) cardDuracaoMedia.classList.remove('skeleton');
+    if (cardCurtaLonga) cardCurtaLonga.classList.remove('skeleton');
+    if (listaTopUsuarios) listaTopUsuarios.classList.remove('skeleton');
+    if (listaFalhas) listaFalhas.classList.remove('skeleton');
   }
 
   async function fetchInstruction() {

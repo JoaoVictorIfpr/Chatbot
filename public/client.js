@@ -13,8 +13,8 @@ const aboutMeBtn = document.getElementById("aboutMeBtn");
 let currentChatHistory = [];
 let conversationsHistory = [];
 let currentConversationIndex = -1;
-// CORREÇÃO: URL do backend no Render
-const backendUrl = 'https://chatbot-gbxu.onrender.com';
+// URL do backend: usa o mesmo host da página (localhost ou produção)
+const backendUrl = window.location.origin;
 
 // --- FUNÇÕES AUXILIARES ---
 function renderMarkdown(text) {
@@ -114,34 +114,38 @@ async function sendMessage() {
     showTypingIndicator();
     
     try {
-        console.log('Enviando para:', `${backendUrl}/chat`); // Debug
-        
+        console.log('Enviando para:', `${backendUrl}/chat`);
+
         const response = await fetch(`${backendUrl}/chat`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
+            body: JSON.stringify({
                 message: input,
-                history: currentChatHistory.slice(0, -1) // Envia o histórico sem a última mensagem do usuário
+                history: currentChatHistory.slice(0, -1)
             }),
         });
-        
-        console.log('Status da resposta:', response.status); // Debug
-        
+
+        console.log('Status da resposta:', response.status);
+
+        const contentType = response.headers.get('content-type') || '';
+        const isJson = contentType.includes('application/json');
+        const payload = isJson ? await response.json() : await response.text();
+
         if (!response.ok) {
-            throw new Error(`Erro do servidor: ${response.status}`);
+            const serverMsg = (isJson && payload && payload.error) ? payload.error : (typeof payload === 'string' && payload ? payload : `Erro do servidor: ${response.status}`);
+            throw new Error(serverMsg);
         }
-        
-        const data = await response.json();
-        const resposta = data.response || "Desculpe, não entendi sua pergunta. Tente novamente!";
-        
+
+        const resposta = payload.response || "Desculpe, não entendi sua pergunta. Tente novamente!";
+
         removeTypingIndicator();
         addBotMessage(resposta);
         saveConversation();
-        
+
     } catch (error) {
         console.error("Erro ao enviar mensagem:", error);
         removeTypingIndicator();
-        addBotMessage("⌚ Erro ao se comunicar com o servidor. Tente novamente mais tarde.");
+        addBotMessage(`⚠️ ${error.message || 'Erro ao se comunicar com o servidor.'}`);
     } finally {
         sendButton.disabled = false;
         sendButton.textContent = "Enviar";

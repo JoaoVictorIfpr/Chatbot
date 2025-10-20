@@ -29,8 +29,14 @@ GEMINI_APIKEY=sua_chave_api_gemini_aqui
 # Chave API do OpenWeatherMap (opcional, para função de clima)
 OPENWEATHER_API_KEY=sua_chave_openweather_aqui
 
-# String de conexão do MongoDB Atlas (nova funcionalidade)
-MONGO_URI=mongodb+srv://usuario:senha@cluster.mongodb.net/chatbotLogsDB?retryWrites=true&w=majority
+# String de conexão do MongoDB Atlas
+MONGO_URI=mongodb+srv://usuario:senha@cluster.mongodb.net/seuDatabase?retryWrites=true&w=majority
+
+# (opcional) senha simples para endpoints admin
+ADMIN_PASSWORD=uma_senha_segura
+
+# (opcional) modelo do Gemini (padrão já é 2.5)
+GEMINI_MODEL=gemini-2.5-flash
 
 # Porta do servidor (opcional, padrão é 3000)
 PORT=3000
@@ -54,6 +60,17 @@ npm install
 npm start
 # ou
 node server.js
+Após iniciar, valide a saúde da aplicação:
+
+```bash
+curl http://localhost:3000/api/health
+```
+
+Resposta esperada:
+
+```json
+{ "app": "ok", "db": "connected", "state": 1 }
+```
 ```
 
 ## Estrutura do Projeto
@@ -71,6 +88,11 @@ chatbot_project/
 ```
 
 ## Endpoints da API
+### GET `/api/health`
+Healthcheck do servidor e do banco de dados.
+
+Resposta 200 quando conectado ao MongoDB.
+
 
 ### GET `/api/user-info`
 Retorna informações de IP e geolocalização do usuário.
@@ -109,14 +131,16 @@ Endpoint original do chatbot para conversas com Gustavo.
 
 ## Estrutura do Banco de Dados
 
-### Coleção: `accessLogs`
+### Coleção: `SessaoChat` (Mongoose)
 ```json
 {
   "_id": "ObjectId",
-  "ipAddress": "8.8.8.8",
-  "city": "Mountain View",
-  "connectionTime": "2025-06-12T10:30:00.000Z",
-  "createdAt": "2025-06-12T10:30:05.123Z"
+  "titulo": "Conversa Sem Título",
+  "messages": [
+    { "role": "user", "parts": [{ "text": "Olá" }], "timestamp": 1710000000000 }
+  ],
+  "createdAt": "2025-06-12T10:30:05.123Z",
+  "updatedAt": "2025-06-12T10:32:10.321Z"
 }
 ```
 
