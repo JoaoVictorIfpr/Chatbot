@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Configurações do Usuário</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .settings-container{max-width:860px;margin:24px auto;padding:16px}
+    .panel{background:rgba(17,22,29,.9);border:1px solid #1b2430;border-radius:12px;padding:16px}
+    textarea{width:100%;min-height:240px;resize:vertical;background:#0b1017;border:1px solid #1b2430;color:#e6edf3;border-radius:10px;padding:12px}
+    .row{display:flex;gap:10px;align-items:center;margin-top:10px}
+    .btn{cursor:pointer;background:#111b27;border:1px solid #1b2430;color:#e6edf3;border-radius:10px;padding:10px 12px}
+    .btn.primary{background:linear-gradient(90deg, #78ffd6, #a8eb12);color:#0b130b;border-color:rgba(120,255,214,.5)}
+    .muted{color:#9aa4b2}
+    .status.ok{color:#78ffd6}
+    .status.error{color:#ff6b6b}
+    .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+    a.btn{display:inline-block;text-decoration:none}
+  </style>
+</head>
+<body>
+  <div class="settings-container">
+    <div class="header">
+      <h1 style="margin:0">Minhas Configurações</h1>
+      <a href="index.html" class="btn">Voltar ao Chat</a>
+    </div>
+    <div class="panel">
+      <h2 style="margin-top:0">Personalidade do Meu Bot</h2>
+      <p class="muted">Defina sua própria instrução de sistema. Esta configuração tem prioridade sobre a global do administrador.</p>
+      <textarea id="customInstruction" placeholder="Ex.: Você é um mestre de yoga e suas respostas são sempre calmas e reflexivas."></textarea>
+      <div class="row">
+        <button id="saveBtn" class="btn primary">Salvar Personalidade</button>
+        <span id="status" class="status"></span>
+      </div>
+      <p class="muted" style="margin-top:12px">A personalidade atualmente ativa é a sua (se definida); caso contrário, a global.</p>
+    </div>
+  </div>
+  <script src="configuracoes.js"></script>
+</body>
+</html>
+
+

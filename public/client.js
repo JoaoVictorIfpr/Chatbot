@@ -16,6 +16,17 @@ let currentConversationIndex = -1;
 // URL do backend: usa o mesmo host da página (localhost ou produção)
 const backendUrl = window.location.origin;
 
+// Identificador simples do usuário (persistido no navegador)
+function getOrCreateUserId() {
+    let id = localStorage.getItem('userId');
+    if (!id) {
+        id = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + '-' + Math.random().toString(16).slice(2));
+        localStorage.setItem('userId', id);
+    }
+    return id;
+}
+const userId = getOrCreateUserId();
+
 // --- FUNÇÕES AUXILIARES ---
 function renderMarkdown(text) {
     // Função simples para renderizar markdown básico
@@ -118,7 +129,7 @@ async function sendMessage() {
 
         const response = await fetch(`${backendUrl}/chat`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", 'x-user-id': userId },
             body: JSON.stringify({
                 message: input,
                 history: currentChatHistory.slice(0, -1)
