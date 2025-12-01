@@ -8,6 +8,8 @@ const conversationsList = document.getElementById("conversationsList");
 const toggleSidebarBtn = document.getElementById("toggleSidebarBtn");
 const sidebar = document.getElementById("sidebar");
 const aboutMeBtn = document.getElementById("aboutMeBtn");
+const personaBanner = document.getElementById("personaBanner");
+const personaStatusText = document.getElementById("personaStatusText");
 
 // Variáveis globais
 let currentChatHistory = [];
@@ -26,6 +28,37 @@ function getOrCreateUserId() {
     return id;
 }
 const userId = getOrCreateUserId();
+
+async function refreshPersonaStatus() {
+    if (!personaBanner || !personaStatusText) return;
+    try {
+        const resp = await fetch(`${backendUrl}/api/user/preferences`, {
+            headers: { 'x-user-id': userId },
+            cache: 'no-store'
+        });
+        if (!resp.ok) throw new Error('Falha ao carregar preferências.');
+        const data = await resp.json();
+        const custom = (data.customSystemInstruction || '').trim();
+        const hint = personaBanner.querySelector('.persona-hint');
+        if (custom.length > 0) {
+            personaStatusText.textContent = 'Personalizada por você';
+            personaBanner.dataset.mode = 'custom';
+            personaBanner.title = custom.length > 200 ? custom.slice(0, 200) + '…' : custom;
+            if (hint) hint.textContent = 'Atualize em Configurações sempre que quiser.';
+        } else {
+            personaStatusText.textContent = 'Global do administrador';
+            personaBanner.dataset.mode = 'global';
+            personaBanner.title = 'Você está usando a instrução global definida pelo admin.';
+            if (hint) hint.textContent = 'Clique em Configurações para criar a sua própria.';
+        }
+    } catch (error) {
+        personaStatusText.textContent = 'Status indisponível';
+        personaBanner.dataset.mode = 'error';
+        personaBanner.title = error.message || 'Não foi possível carregar o status.';
+        const hint = personaBanner.querySelector('.persona-hint');
+        if (hint) hint.textContent = 'Verifique sua conexão com o servidor ou recarregue a página.';
+    }
+}
 
 // --- FUNÇÕES AUXILIARES ---
 function renderMarkdown(text) {
@@ -381,6 +414,8 @@ document.addEventListener("DOMContentLoaded", () => {
     newChatBtn.addEventListener("click", newChat);
     aboutMeBtn.addEventListener("click", showAboutMe);
     toggleSidebarBtn.addEventListener("click", toggleSidebar);
+    refreshPersonaStatus();
+    window.addEventListener('focus', refreshPersonaStatus);
     
     // Enter para enviar mensagem
     inputField.addEventListener("keypress", (e) => {

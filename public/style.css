@@ -200,6 +200,43 @@ h1 {
   gap: 8px;
 }
 
+.persona-banner {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 2px solid #272727;
+  border-radius: 6px;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 16px;
+}
+
+.persona-label {
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #ddd;
+}
+
+.persona-hint {
+  opacity: 0.75;
+  font-size: 14px;
+}
+
+.persona-banner[data-mode="custom"] {
+  border-color: #3B8526;
+  box-shadow: inset 0 0 8px rgba(59,133,38,0.4);
+}
+
+.persona-banner[data-mode="global"] {
+  border-color: #725438;
+}
+
+.persona-banner[data-mode="error"] {
+  border-color: #8B3030;
+}
+
 /* Estilo da área de chat - CORRIGIDO */
 .chat-container {
   flex: 1;
